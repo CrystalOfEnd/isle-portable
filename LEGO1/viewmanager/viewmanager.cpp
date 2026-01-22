@@ -9,6 +9,7 @@
 DECOMP_SIZE_ASSERT(ViewManager, 0x1bc)
 
 // GLOBAL: LEGO1 0x100dbc78
+// GLOBAL: BETA10 0x101c3398
 int g_boundingBoxCornerMap[8][3] =
 	{{0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {1, 0, 0}, {0, 1, 1}, {1, 0, 1}, {1, 1, 0}, {1, 1, 1}};
 
@@ -16,12 +17,15 @@ int g_boundingBoxCornerMap[8][3] =
 int g_planePointIndexMap[18] = {0, 1, 5, 6, 2, 3, 3, 0, 4, 1, 2, 6, 0, 3, 2, 4, 5, 6};
 
 // GLOBAL: LEGO1 0x10101050
+// GLOBAL: BETA10 0x10205914
 float g_LODScaleFactor = 4.0F;
 
 // GLOBAL: LEGO1 0x10101054
-float g_minLODThreshold = 0.00097656297;
+// GLOBAL: BETA10 0x10205918
+float g_minLODThreshold = 1.0000005F / 1024;
 
 // GLOBAL: LEGO1 0x10101058
+// GLOBAL: BETA10 0x1020591c
 int g_maxLODLevels = 6;
 
 // GLOBAL: LEGO1 0x1010105c
@@ -31,17 +35,19 @@ float g_viewDistance = 0.000125F;
 float g_elapsedSeconds = 0;
 
 inline void SetAppData(ViewROI* p_roi, LPD3DRM_APPDATA data);
-inline undefined4 GetD3DRM(IDirect3DRM2*& d3drm, Tgl::Renderer* pRenderer);
-inline undefined4 GetFrame(IDirect3DRMFrame2*& frame, Tgl::Group* scene);
+inline undefined4 GetD3DRM_viewmanager(IDirect3DRM2*& d3drm, Tgl::Renderer* pRenderer);
+inline undefined4 GetFrame(IDirect3DRMFrame2** frame, Tgl::Group* scene);
 
 // FUNCTION: LEGO1 0x100a5eb0
+// FUNCTION: BETA10 0x10171cb3
 ViewManager::ViewManager(Tgl::Renderer* pRenderer, Tgl::Group* scene, const OrientableROI* point_of_view)
 	: scene(scene), flags(c_bit1 | c_bit2 | c_bit3 | c_bit4)
 {
 	SetPOVSource(point_of_view);
 	prev_render_time = 0.09;
-	GetD3DRM(d3drm, pRenderer);
-	GetFrame(frame, scene);
+	GetD3DRM_viewmanager(d3drm, pRenderer);
+	GetFrame(&frame, scene);
+
 	width = 0.0;
 	height = 0.0;
 	view_angle = 0.0;
@@ -165,7 +171,7 @@ void ViewManager::UpdateROIDetailBasedOnLOD(ViewROI* p_roi, int p_lodLevel)
 	if (lodLevel < 0) {
 		lod = (ViewLOD*) p_roi->GetLOD(p_lodLevel);
 
-		if (lod->GetUnknown0x08() & ViewLOD::c_bit4) {
+		if (lod->GetFlags() & ViewLOD::c_hasMesh) {
 			scene->Add(group);
 			SetAppData(p_roi, reinterpret_cast<LPD3DRM_APPDATA>(p_roi));
 		}
@@ -184,7 +190,7 @@ void ViewManager::UpdateROIDetailBasedOnLOD(ViewROI* p_roi, int p_lodLevel)
 		lod = (ViewLOD*) p_roi->GetLOD(p_lodLevel);
 	}
 
-	if (lod->GetUnknown0x08() & ViewLOD::c_bit4) {
+	if (lod->GetFlags() & ViewLOD::c_hasMesh) {
 		meshBuilder = lod->GetMeshBuilder();
 
 		if (meshBuilder != NULL) {
@@ -235,7 +241,7 @@ inline void ViewManager::ManageVisibilityAndDetailRecursively(ViewROI* p_from, i
 			if (p_from->GetWorldBoundingSphere().Radius() > 0.001F) {
 				float projectedSize = ProjectedSize(p_from->GetWorldBoundingSphere());
 
-				if (projectedSize < seconds_allowed * g_viewDistance) {
+				if (RealtimeView::GetUserMaxLOD() <= 5.0f && projectedSize < seconds_allowed * g_viewDistance) {
 					if (p_from->GetLodLevel() != ViewROI::c_lodLevelInvisible) {
 						ManageVisibilityAndDetailRecursively(p_from, ViewROI::c_lodLevelInvisible);
 					}
@@ -270,6 +276,7 @@ inline void ViewManager::ManageVisibilityAndDetailRecursively(ViewROI* p_from, i
 			p_from->SetLodLevel(ViewROI::c_lodLevelUnset);
 
 			for (CompoundObject::const_iterator it = comp->begin(); it != comp->end(); it++) {
+				// LINE: BETA10 0x10172bbd
 				ManageVisibilityAndDetailRecursively((ViewROI*) *it, p_lodLevel);
 			}
 		}
@@ -361,10 +368,11 @@ inline int ViewManager::CalculateLODLevel(float p_maximumScale, float p_initialS
 	assert(from);
 
 	if (GetFirstLODIndex(from) != 0) {
-		if (p_maximumScale < g_minLODThreshold) {
+		if (RealtimeView::GetUserMaxLOD() <= 5.0f && p_maximumScale < g_minLODThreshold) {
 			return 0;
 		}
 		else {
+			// LINE: BETA10 0x10172c4d
 			lodLevel = 1;
 		}
 	}
@@ -389,7 +397,7 @@ inline int ViewManager::GetFirstLODIndex(ViewROI* p_roi)
 	const LODListBase* lods = p_roi->GetLODs();
 
 	if (lods != NULL && lods->Size() > 0) {
-		if (((ViewLOD*) p_roi->GetLOD(0))->GetUnknown0x08Test8()) {
+		if (((ViewLOD*) p_roi->GetLOD(0))->IsExtraLOD()) {
 			return 1;
 		}
 		else {
@@ -404,7 +412,7 @@ inline int ViewManager::GetFirstLODIndex(ViewROI* p_roi)
 			const LODListBase* lods = ((ViewROI*) *it)->GetLODs();
 
 			if (lods != NULL && lods->Size() > 0) {
-				if (((ViewLOD*) ((ViewROI*) *it)->GetLOD(0))->GetUnknown0x08Test8()) {
+				if (((ViewLOD*) ((ViewROI*) *it)->GetLOD(0))->IsExtraLOD()) {
 					return 1;
 				}
 				else {
@@ -475,6 +483,7 @@ void ViewManager::SetFrustrum(float fov, float front, float back)
 }
 
 // FUNCTION: LEGO1 0x100a6da0
+// FUNCTION: BETA10 0x10173977
 void ViewManager::SetPOVSource(const OrientableROI* point_of_view)
 {
 	if (point_of_view != NULL) {
@@ -499,7 +508,7 @@ float ViewManager::ProjectedSize(const BoundingSphere& p_bounding_sphere)
 }
 
 // FUNCTION: LEGO1 0x100a6e00
-ViewROI* ViewManager::Pick(Tgl::View* p_view, unsigned int x, unsigned int y)
+ViewROI* ViewManager::Pick(Tgl::View* p_view, int x, int y)
 {
 	LPDIRECT3DRMPICKEDARRAY picked = NULL;
 	ViewROI* result = NULL;
@@ -536,11 +545,11 @@ ViewROI* ViewManager::Pick(Tgl::View* p_view, unsigned int x, unsigned int y)
 							}
 						}
 					}
-
-					visual->Release();
-					frameArray->Release();
 				}
 			}
+
+			visual->Release();
+			frameArray->Release();
 		}
 
 		picked->Release();
@@ -553,19 +562,28 @@ inline void SetAppData(ViewROI* p_roi, LPD3DRM_APPDATA data)
 {
 	IDirect3DRMFrame2* frame = NULL;
 
-	if (GetFrame(frame, p_roi->GetGeometry()) == 0) {
+	if (GetFrame(&frame, p_roi->GetGeometry()) == 0) {
 		frame->SetAppData(data);
 	}
 }
 
-inline undefined4 GetD3DRM(IDirect3DRM2*& d3drm, Tgl::Renderer* pRenderer)
+// FUNCTION: BETA10 0x10171f30
+inline undefined4 GetD3DRM_viewmanager(IDirect3DRM2*& d3drm, Tgl::Renderer* p_tglRenderer)
 {
-	d3drm = ((TglImpl::RendererImpl*) pRenderer)->ImplementationData();
+	assert(p_tglRenderer);
+	TglImpl::RendererImpl* renderer = (TglImpl::RendererImpl*) p_tglRenderer;
+	// Note: Diff in BETA10 (thunked in recompile but not in orig)
+	d3drm = renderer->ImplementationData();
 	return 0;
 }
 
-inline undefined4 GetFrame(IDirect3DRMFrame2*& frame, Tgl::Group* scene)
+// FUNCTION: BETA10 0x10171f82
+inline undefined4 GetFrame(IDirect3DRMFrame2** p_f, Tgl::Group* p_group)
 {
-	frame = ((TglImpl::GroupImpl*) scene)->ImplementationData();
+	assert(p_f && p_group);
+	TglImpl::GroupImpl* cast = (TglImpl::GroupImpl*) p_group;
+	assert(cast);
+	*p_f = cast->ImplementationData();
+	assert(p_f);
 	return 0;
 }

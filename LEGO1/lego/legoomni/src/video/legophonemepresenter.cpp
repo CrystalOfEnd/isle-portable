@@ -25,8 +25,8 @@ void LegoPhonemePresenter::Init()
 {
 	m_rectCount = 0;
 	m_textureInfo = NULL;
-	m_unk0x70 = FALSE;
-	m_unk0x84 = FALSE;
+	m_reusedPhoneme = FALSE;
+	m_isPartOfAnimMM = FALSE;
 }
 
 // FUNCTION: LEGO1 0x1004e3d0
@@ -49,7 +49,7 @@ void LegoPhonemePresenter::StartingTickle()
 
 			if (m_compositePresenter != NULL && m_compositePresenter->IsA("LegoAnimMMPresenter")) {
 				entityROI = FindROI(m_roiName.GetData());
-				m_unk0x84 = TRUE;
+				m_isPartOfAnimMM = TRUE;
 			}
 			else {
 				entityROI = CharacterManager()->GetActorROI(m_roiName.GetData(), TRUE);
@@ -81,7 +81,7 @@ void LegoPhonemePresenter::StartingTickle()
 				phoneme->SetCount(phoneme->GetCount() + 1);
 				cursor.SetValue(phoneme);
 
-				m_unk0x70 = TRUE;
+				m_reusedPhoneme = TRUE;
 			}
 		}
 	}
@@ -139,7 +139,7 @@ void LegoPhonemePresenter::EndAction()
 			if (phoneme->GetCount() == 1) {
 				LegoROI* roi;
 
-				if (m_unk0x84) {
+				if (m_isPartOfAnimMM) {
 					roi = FindROI(m_roiName.GetData());
 				}
 				else {
@@ -150,22 +150,27 @@ void LegoPhonemePresenter::EndAction()
 					CharacterManager()->SetHeadTexture(roi, NULL);
 				}
 
-				if (!m_unk0x84) {
+				if (!m_isPartOfAnimMM) {
 					CharacterManager()->ReleaseActor(m_roiName.GetData());
 				}
 
 				TextureContainer()->EraseCached(phoneme->GetCachedTextureInfo());
 				TextureContainer()->EraseCached(phoneme->GetTextureInfo());
 				cursor.Destroy();
+				phoneme = NULL;
 			}
 			else {
 				phoneme->SetCount(phoneme->GetCount() - 1);
 				cursor.SetValue(phoneme);
 			}
 
-			if (!m_unk0x84) {
+			if (!m_isPartOfAnimMM) {
 				CharacterManager()->ReleaseActor(m_roiName.GetData());
 			}
+		}
+		else {
+			delete phoneme;
+			phoneme = NULL;
 		}
 	}
 }

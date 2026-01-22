@@ -1,4 +1,5 @@
 set(CMAKE_C_CLANG_TIDY)
+set(CMAKE_CXX_CLANG_TIDY)
 
 if(DOWNLOAD_DEPENDENCIES)
     include(FetchContent)
@@ -49,26 +50,22 @@ target_include_directories(libsmacker PUBLIC ${libsmacker_SOURCE_DIR})
 
 if(DOWNLOAD_DEPENDENCIES)
     include(FetchContent)
-    FetchContent_Declare(
-        imgui
-        GIT_REPOSITORY "https://github.com/ocornut/imgui"
-        GIT_TAG f5befd2d29e66809cd1110a152e375a7f1981f06
+    FetchContent_Populate(
+        libweaver
+        URL https://github.com/isledecomp/SIEdit/archive/afd4933844b95ef739a7e77b097deb7efe4ec576.tar.gz
+        URL_MD5 59fd3c36f4f380f730cd9bedfc846397
     )
-    FetchContent_MakeAvailable(imgui)
-else()
-    set(imgui_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
+    add_library(libweaver STATIC
+        ${libweaver_SOURCE_DIR}/lib/core.cpp
+        ${libweaver_SOURCE_DIR}/lib/file.cpp
+        ${libweaver_SOURCE_DIR}/lib/interleaf.cpp
+        ${libweaver_SOURCE_DIR}/lib/object.cpp
+        ${libweaver_SOURCE_DIR}/lib/sitypes.cpp
+    )
+    add_library(libweaver::libweaver ALIAS libweaver)
+    target_compile_definitions(libweaver PRIVATE $<$<BOOL:${WIN32}>:NOMINMAX>)
+    target_include_directories(libweaver PUBLIC ${libweaver_SOURCE_DIR}/include/libweaver)
+    set_property(TARGET libweaver PROPERTY CXX_STANDARD 98)
+    set_property(TARGET libweaver PROPERTY CXX_STANDARD_REQUIRED ON)
 endif()
 
-add_library(imgui STATIC
-    ${imgui_SOURCE_DIR}/imgui.cpp
-    ${imgui_SOURCE_DIR}/imgui_draw.cpp
-    ${imgui_SOURCE_DIR}/imgui_tables.cpp
-    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/imgui_demo.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
-)
-target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
-target_link_libraries(imgui PUBLIC SDL3::Headers)
-target_link_libraries(imgui PRIVATE SDL3::SDL3)
-set_property(TARGET imgui PROPERTY CXX_CLANG_TIDY "")

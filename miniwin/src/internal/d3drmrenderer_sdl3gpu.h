@@ -47,23 +47,27 @@ public:
 	static Direct3DRMRenderer* Create(DWORD width, DWORD height);
 	~Direct3DRMSDL3GPURenderer() override;
 	void PushLights(const SceneLight* vertices, size_t count) override;
-	Uint32 GetTextureId(IDirect3DRMTexture* texture) override;
+	Uint32 GetTextureId(IDirect3DRMTexture* texture, bool isUI, float scaleX, float scaleY) override;
 	Uint32 GetMeshId(IDirect3DRMMesh* mesh, const MeshGroup* meshGroup) override;
 	void SetProjection(const D3DRMMATRIX4D& projection, D3DVALUE front, D3DVALUE back) override;
 	void SetFrustumPlanes(const Plane* frustumPlanes) override;
-	DWORD GetWidth() override;
-	DWORD GetHeight() override;
-	void GetDesc(D3DDEVICEDESC* halDesc, D3DDEVICEDESC* helDesc) override;
-	const char* GetName() override;
 	HRESULT BeginFrame() override;
 	void EnableTransparency() override;
 	void SubmitDraw(
 		DWORD meshId,
 		const D3DRMMATRIX4D& modelViewMatrix,
+		const D3DRMMATRIX4D& worldMatrix,
+		const D3DRMMATRIX4D& viewMatrix,
 		const Matrix3x3& normalMatrix,
 		const Appearance& appearance
 	) override;
 	HRESULT FinalizeFrame() override;
+	void Resize(int width, int height, const ViewportTransform& viewportTransform) override;
+	void Clear(float r, float g, float b) override;
+	void Flip() override;
+	void Draw2DImage(Uint32 textureId, const SDL_Rect& srcRect, const SDL_Rect& dstRect, FColor color) override;
+	void Download(SDL_Surface* target) override;
+	void SetDither(bool dither) override;
 
 private:
 	Direct3DRMSDL3GPURenderer(
@@ -72,12 +76,13 @@ private:
 		SDL_GPUDevice* device,
 		SDL_GPUGraphicsPipeline* opaquePipeline,
 		SDL_GPUGraphicsPipeline* transparentPipeline,
-		SDL_GPUTexture* transferTexture,
-		SDL_GPUTexture* depthTexture,
+		SDL_GPUGraphicsPipeline* uiPipeline,
 		SDL_GPUSampler* sampler,
+		SDL_GPUSampler* uiSampler,
 		SDL_GPUTransferBuffer* uploadBuffer,
-		SDL_GPUTransferBuffer* downloadBuffer
+		int uploadBufferSize
 	);
+	void StartRenderPass(float r, float g, float b, bool clear);
 	void WaitForPendingUpload();
 	void AddTextureDestroyCallback(Uint32 id, IDirect3DRMTexture* texture);
 	SDL_GPUTransferBuffer* GetUploadBuffer(size_t size);
@@ -85,26 +90,29 @@ private:
 	void AddMeshDestroyCallback(Uint32 id, IDirect3DRMMesh* mesh);
 	SDL3MeshCache UploadMesh(const MeshGroup& meshGroup);
 
-	DWORD m_width;
-	DWORD m_height;
+	MeshGroup m_uiMesh;
+	SDL3MeshCache m_uiMeshCache;
 	D3DVALUE m_front;
 	D3DVALUE m_back;
 	ViewportUniforms m_uniforms;
 	FragmentShadingData m_fragmentShadingData;
 	D3DDEVICEDESC m_desc;
+	D3DRMMATRIX4D m_projection;
 	std::vector<SDL3TextureCache> m_textures;
 	std::vector<SDL3MeshCache> m_meshs;
 	SDL_GPUDevice* m_device;
 	SDL_GPUGraphicsPipeline* m_opaquePipeline;
 	SDL_GPUGraphicsPipeline* m_transparentPipeline;
-	SDL_GPUTexture* m_transferTexture;
-	SDL_GPUTexture* m_depthTexture;
+	SDL_GPUGraphicsPipeline* m_uiPipeline;
+	SDL_GPUTexture* m_transferTexture = nullptr;
+	SDL_GPUTexture* m_depthTexture = nullptr;
 	SDL_GPUTexture* m_dummyTexture;
 	int m_uploadBufferSize;
 	SDL_GPUTransferBuffer* m_uploadBuffer;
-	SDL_GPUTransferBuffer* m_downloadBuffer;
+	SDL_GPUTransferBuffer* m_downloadBuffer = nullptr;
 	SDL_GPUBuffer* m_vertexBuffer = nullptr;
 	SDL_GPUSampler* m_sampler;
+	SDL_GPUSampler* m_uiSampler;
 	SDL_GPUCommandBuffer* m_cmdbuf = nullptr;
 	SDL_GPURenderPass* m_renderPass = nullptr;
 	SDL_GPUFence* m_uploadFence = nullptr;
@@ -112,9 +120,30 @@ private:
 
 inline static void Direct3DRMSDL3GPU_EnumDevice(LPD3DENUMDEVICESCALLBACK cb, void* ctx)
 {
-	Direct3DRMRenderer* device = Direct3DRMSDL3GPURenderer::Create(640, 480);
-	if (device) {
-		EnumDevice(cb, ctx, device, SDL3_GPU_GUID);
-		delete device;
+#ifdef __APPLE__
+	SDL_GPUDevice* device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, false, nullptr);
+	if (!device) {
+		return;
 	}
+	SDL_DestroyGPUDevice(device);
+#else
+	Direct3DRMRenderer* device = Direct3DRMSDL3GPURenderer::Create(640, 480);
+	if (!device) {
+		return;
+	}
+	device->Release();
+#endif
+
+	D3DDEVICEDESC halDesc = {};
+	halDesc.dcmColorModel = D3DCOLOR_RGB;
+	halDesc.dwFlags = D3DDD_DEVICEZBUFFERBITDEPTH;
+	halDesc.dwDeviceZBufferBitDepth = DDBD_32;
+	halDesc.dwDeviceRenderBitDepth = DDBD_32;
+	halDesc.dpcTriCaps.dwTextureCaps = D3DPTEXTURECAPS_PERSPECTIVE;
+	halDesc.dpcTriCaps.dwShadeCaps = D3DPSHADECAPS_ALPHAFLATBLEND;
+	halDesc.dpcTriCaps.dwTextureFilterCaps = D3DPTFILTERCAPS_LINEAR;
+
+	D3DDEVICEDESC helDesc = {};
+
+	EnumDevice(cb, ctx, "SDL3 GPU HAL", &halDesc, &helDesc, SDL3_GPU_GUID);
 }

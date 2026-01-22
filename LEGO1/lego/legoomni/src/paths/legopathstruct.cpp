@@ -3,7 +3,7 @@
 #include "isle.h"
 #include "jukebox.h"
 #include "jukebox_actions.h"
-#include "legohideanimpresenter.h"
+#include "legoanimpresenter.h"
 #include "legopathactor.h"
 #include "legoutils.h"
 #include "misc.h"
@@ -19,7 +19,6 @@ DECOMP_SIZE_ASSERT(LegoPathStruct, 0x14)
 extern MxU32 g_isleFlags;
 
 // GLOBAL: LEGO1 0x100f119c
-// GLOBAL: BETA10 0x100f119c
 MxBool g_unk0x100f119c = FALSE;
 
 // FUNCTION: LEGO1 0x1001b700
@@ -50,7 +49,7 @@ MxBool LegoPathStruct::HandleTrigger(LegoPathActor* p_actor, MxBool p_direction,
 			}
 			break;
 		case c_d: {
-			p_actor->VTable0x58(p_data);
+			p_actor->SetLastPathStruct(p_data);
 
 			LegoPathStructNotificationParam param(c_notificationPathStruct, p_actor, m_name[2], p_data);
 			p_actor->Notify(param);

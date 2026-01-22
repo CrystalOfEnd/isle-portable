@@ -28,6 +28,7 @@ DECOMP_SIZE_ASSERT(MxStopWatch, 0x18)
 DECOMP_SIZE_ASSERT(MxFrequencyMeter, 0x20)
 
 // FUNCTION: LEGO1 0x1007aa20
+// FUNCTION: BETA10 0x100d5a00
 LegoVideoManager::LegoVideoManager()
 {
 	m_renderer = NULL;
@@ -53,6 +54,8 @@ LegoVideoManager::LegoVideoManager()
 	m_unk0xe5 = FALSE;
 	m_unk0x554 = FALSE;
 	m_paused = FALSE;
+	m_camera = NULL;
+	m_appdata = NULL;
 }
 
 // FUNCTION: LEGO1 0x1007ab40
@@ -108,7 +111,7 @@ MxResult LegoVideoManager::Create(MxVideoParam& p_videoParam, MxU32 p_frequencyM
 		goto done;
 	}
 
-	if (deviceEnumerate.DoEnumerate() != SUCCESS) {
+	if (deviceEnumerate.DoEnumerate(hwnd) != SUCCESS) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "LegoDeviceEnumerate::DoEnumerate failed");
 		goto done;
 	}
@@ -236,6 +239,11 @@ done:
 // FUNCTION: BETA10 0x100d6816
 void LegoVideoManager::Destroy()
 {
+	if (m_camera != NULL) {
+		m_camera->Release();
+		m_camera = NULL;
+	}
+
 	if (m_cursorSurface != NULL) {
 		m_cursorSurface->Release();
 		m_cursorSurface = NULL;
@@ -263,6 +271,12 @@ void LegoVideoManager::Destroy()
 
 	delete m_3dManager;
 	MxVideoManager::Destroy();
+
+	if (m_direct3d != NULL) {
+		delete m_direct3d;
+		m_direct3d = NULL;
+	}
+
 	delete m_phonemeRefList;
 	delete m_stopWatch;
 }
@@ -272,14 +286,13 @@ void LegoVideoManager::MoveCursor(MxS32 p_cursorX, MxS32 p_cursorY)
 {
 	m_cursorX = p_cursorX;
 	m_cursorY = p_cursorY;
-	m_drawCursor = TRUE;
 
-	if (623 < p_cursorX) {
-		m_cursorX = 623;
+	if (640 < p_cursorX) {
+		m_cursorX = 640;
 	}
 
-	if (463 < p_cursorY) {
-		m_cursorY = 463;
+	if (480 < p_cursorY) {
+		m_cursorY = 480;
 	}
 }
 
@@ -297,12 +310,15 @@ void LegoVideoManager::ToggleFPS(MxBool p_visible)
 }
 
 // FUNCTION: LEGO1 0x1007b770
+// STUB: BETA10 0x100d69cc
 MxResult LegoVideoManager::Tickle()
 {
+#ifndef BETA10
 	if (m_unk0x554 && !m_videoParam.Flags().GetFlipSurfaces() &&
 		TransitionManager()->GetTransitionType() == MxTransitionManager::e_idle) {
 		Sleep(30);
 	}
+#endif
 
 	m_stopWatch->Stop();
 	m_elapsedSeconds = m_stopWatch->ElapsedSeconds();
@@ -388,15 +404,7 @@ inline void LegoVideoManager::DrawCursor()
 	LPDIRECTDRAWSURFACE ddSurface2 = m_displaySurface->GetDirectDrawSurface2();
 
 	if (!m_cursorSurface) {
-		m_cursorRect.top = 0;
-		m_cursorRect.left = 0;
-		m_cursorRect.bottom = 16;
-		m_cursorRect.right = 16;
-		m_cursorSurface = MxDisplaySurface::CreateCursorSurface();
-
-		if (!m_cursorSurface) {
-			m_drawCursor = FALSE;
-		}
+		return;
 	}
 
 	ddSurface2
@@ -406,37 +414,14 @@ inline void LegoVideoManager::DrawCursor()
 // FUNCTION: LEGO1 0x1007bbc0
 void LegoVideoManager::DrawFPS()
 {
-	char zeros[8] = "0000.00";
-
 	if (m_unk0x528 == NULL) {
-		m_arialFont = CreateFont(
-			12,
-			0,
-			0,
-			0,
-			FW_NORMAL,
-			FALSE,
-			FALSE,
-			FALSE,
-			ANSI_CHARSET,
-			OUT_DEFAULT_PRECIS,
-			CLIP_DEFAULT_PRECIS,
-			DEFAULT_QUALITY,
-			FF_DONTCARE | VARIABLE_PITCH,
-			"Arial"
-		);
+		int width = 64; // Big enough for 9999.99
+		int height = 16;
 
-		HDC dc = GetDC(NULL);
-		SelectObject(dc, m_arialFont);
-		GetTextExtentPoint(dc, zeros, strlen(zeros), &m_fpsSize);
-		ReleaseDC(NULL, dc);
-
-		m_unk0x528 = m_displaySurface->FUN_100bc8b0(m_fpsSize.cx, m_fpsSize.cy);
-		SetRect(&m_fpsRect, 0, 0, m_fpsSize.cx, m_fpsSize.cy);
+		m_unk0x528 = m_displaySurface->FUN_100bc8b0(width, height);
+		SetRect(&m_fpsRect, 0, 0, width, height);
 
 		if (m_unk0x528 == NULL) {
-			DeleteObject(m_arialFont);
-			m_arialFont = NULL;
 			return;
 		}
 
@@ -450,9 +435,7 @@ void LegoVideoManager::DrawFPS()
 
 		if (m_unk0x528->Lock(NULL, &surfaceDesc, DDLOCK_WAIT, NULL) != DD_OK) {
 			m_unk0x528->Release();
-			DeleteObject(m_arialFont);
 			m_unk0x528 = NULL;
-			m_arialFont = NULL;
 		}
 		else {
 			DWORD i;
@@ -472,8 +455,7 @@ void LegoVideoManager::DrawFPS()
 		if (Timer()->GetTime() > m_unk0x54c + 5000.f) {
 			char buffer[32];
 			MxFloat time = (Timer()->GetTime() - m_unk0x54c) / 1000.0f;
-			MxS32 nb = sprintf(buffer, "%.02f", m_unk0x550 / time);
-			SDL_Log("%.02f", m_unk0x550 / time);
+			sprintf(buffer, "%.02f", m_unk0x550 / time);
 			m_unk0x54c = Timer()->GetTime();
 
 			DDSURFACEDESC surfaceDesc;
@@ -481,37 +463,13 @@ void LegoVideoManager::DrawFPS()
 			surfaceDesc.dwSize = sizeof(surfaceDesc);
 
 			if (m_unk0x528->Lock(NULL, &surfaceDesc, DDLOCK_WAIT, NULL) == DD_OK) {
-				DWORD i;
-				char* ptr = (char*) surfaceDesc.lpSurface;
+				memset(surfaceDesc.lpSurface, 0, surfaceDesc.lPitch * surfaceDesc.dwHeight);
 
-				for (i = 0; i < surfaceDesc.dwHeight; i++) {
-					memset(ptr, 0, surfaceDesc.lPitch);
-					ptr += surfaceDesc.lPitch;
-				}
+				DrawTextToSurface32((uint8_t*) surfaceDesc.lpSurface, surfaceDesc.lPitch, 0, 0, buffer, 0xFF0000FF);
 
 				m_unk0x528->Unlock(surfaceDesc.lpSurface);
+				m_unk0x550 = 1.f;
 			}
-
-			HDC dc;
-			if (m_unk0x528->GetDC(&dc) != DD_OK) {
-				m_unk0x528->Release();
-				m_unk0x528 = NULL;
-				DeleteObject(m_arialFont);
-				m_arialFont = NULL;
-				return;
-			}
-
-			SelectObject(dc, m_arialFont);
-			SetTextColor(dc, RGB(255, 255, 0));
-			SetBkColor(dc, RGB(0, 0, 0));
-			SetBkMode(dc, OPAQUE);
-			GetTextExtentPoint32(dc, buffer, nb, &m_fpsSize);
-
-			RECT rect;
-			SetRect(&rect, 0, 0, m_fpsSize.cx, m_fpsSize.cy);
-			ExtTextOut(dc, 0, 0, ETO_OPAQUE, &rect, buffer, nb, NULL);
-			m_unk0x528->ReleaseDC(dc);
-			m_unk0x550 = 1.f;
 		}
 		else {
 			m_unk0x550 += 1.f;
@@ -526,6 +484,7 @@ void LegoVideoManager::DrawFPS()
 }
 
 // FUNCTION: LEGO1 0x1007c080
+// FUNCTION: BETA10 0x100d6d28
 MxPresenter* LegoVideoManager::GetPresenterAt(MxS32 p_x, MxS32 p_y)
 {
 	MxPresenterListCursor cursor(m_presenters);
@@ -563,6 +522,7 @@ MxPresenter* LegoVideoManager::GetPresenterByActionObjectName(const char* p_acti
 }
 
 // FUNCTION: LEGO1 0x1007c290
+// FUNCTION: BETA10 0x100d731e
 MxResult LegoVideoManager::RealizePalette(MxPalette* p_pallete)
 {
 	if (p_pallete && m_videoParam.GetPalette()) {
@@ -604,14 +564,14 @@ void LegoVideoManager::EnableFullScreenMovie(MxBool p_enable, MxBool p_scale)
 			m_palette = m_videoParam.GetPalette()->Clone();
 			OverrideSkyColor(FALSE);
 
-			m_displaySurface->GetVideoParam().Flags().SetF1bit3(p_scale);
+			m_displaySurface->GetVideoParam().Flags().SetDoubleScaling(p_scale);
 
 			m_render3d = FALSE;
 			m_fullScreenMovie = TRUE;
 		}
 		else {
 			m_displaySurface->ClearScreen();
-			m_displaySurface->GetVideoParam().Flags().SetF1bit3(FALSE);
+			m_displaySurface->GetVideoParam().Flags().SetDoubleScaling(FALSE);
 
 			// restore previous pallete
 			RealizePalette(m_palette);
@@ -636,23 +596,23 @@ void LegoVideoManager::EnableFullScreenMovie(MxBool p_enable, MxBool p_scale)
 	}
 
 	if (p_enable) {
-		m_displaySurface->GetVideoParam().Flags().SetF1bit3(p_scale);
+		m_displaySurface->GetVideoParam().Flags().SetDoubleScaling(p_scale);
 	}
 	else {
-		m_displaySurface->GetVideoParam().Flags().SetF1bit3(FALSE);
+		m_displaySurface->GetVideoParam().Flags().SetDoubleScaling(FALSE);
 	}
 }
 
 // FUNCTION: LEGO1 0x1007c440
 void LegoVideoManager::SetSkyColor(float p_red, float p_green, float p_blue)
 {
-	PALETTEENTRY colorStrucure;
+	PALETTEENTRY colorStructure;
 
-	colorStrucure.peRed = (p_red * 255.0f);
-	colorStrucure.peGreen = (p_green * 255.0f);
-	colorStrucure.peBlue = (p_blue * 255.0f);
-	colorStrucure.peFlags = D3DPAL_RESERVED | PC_NOCOLLAPSE;
-	m_videoParam.GetPalette()->SetSkyColor(&colorStrucure);
+	colorStructure.peRed = (p_red * 255.0f);
+	colorStructure.peGreen = (p_green * 255.0f);
+	colorStructure.peBlue = (p_blue * 255.0f);
+	colorStructure.peFlags = D3DPAL_RESERVED | PC_NOCOLLAPSE;
+	m_videoParam.GetPalette()->SetSkyColor(&colorStructure);
 	m_videoParam.GetPalette()->SetOverrideSkyColor(TRUE);
 	m_3dManager->GetLego3DView()->GetView()->SetBackgroundColor(p_red, p_green, p_blue);
 }
@@ -664,6 +624,7 @@ void LegoVideoManager::OverrideSkyColor(MxBool p_shouldOverride)
 }
 
 // FUNCTION: LEGO1 0x1007c4d0
+// FUNCTION: BETA10 0x100d77d3
 void LegoVideoManager::UpdateView(MxU32 p_x, MxU32 p_y, MxU32 p_width, MxU32 p_height)
 {
 	if (p_width == 0) {
@@ -729,6 +690,7 @@ int LegoVideoManager::EnableRMDevice()
 			d3drmDev2->SetDither(m_dither);
 			d3drmDev2->SetBufferCount(m_bufferCount);
 			m_camera->Release();
+			m_camera = nullptr;
 
 			if (viewport->AddDestroyCallback(ViewportDestroyCallback, m_appdata) == D3DRM_OK) {
 				((TglImpl::ViewImpl*) m_3dManager->GetLego3DView()->GetView())->SetImplementationData(viewport);
@@ -825,4 +787,91 @@ MxResult LegoVideoManager::ConfigureD3DRM()
 	}
 
 	return SUCCESS;
+}
+
+void LegoVideoManager::DrawDigitToBuffer32(uint8_t* p_dst, int p_pitch, int p_x, int p_y, int p_digit, uint32_t p_color)
+{
+	if (p_digit < 0 || p_digit > 9) {
+		return;
+	}
+
+	uint32_t* pixels = (uint32_t*) p_dst;
+	int rowStride = p_pitch / 4;
+
+	// 4x5 bitmap font
+	const uint8_t digitFont[5][10] = {
+		{0b1111, 0b0001, 0b1111, 0b1111, 0b1001, 0b1111, 0b1111, 0b1111, 0b1111, 0b1111},
+		{0b1001, 0b0001, 0b0001, 0b0001, 0b1001, 0b1000, 0b1000, 0b0001, 0b1001, 0b1001},
+		{0b1001, 0b0001, 0b1111, 0b1111, 0b1111, 0b1111, 0b1111, 0b0010, 0b1111, 0b1111},
+		{0b1001, 0b0001, 0b1000, 0b0001, 0b0001, 0b0001, 0b1001, 0b0010, 0b1001, 0b0001},
+		{0b1111, 0b0001, 0b1111, 0b1111, 0b0001, 0b1111, 0b1111, 0b0100, 0b1111, 0b1111},
+	};
+
+	for (int row = 0; row < 5; ++row) {
+		uint8_t bits = digitFont[row][p_digit];
+		for (int col = 0; col < 5; ++col) {
+			if (bits & (1 << (4 - col))) {
+				for (int dy = 0; dy < 2; ++dy) {
+					for (int dx = 0; dx < 2; ++dx) {
+						pixels[(p_y + row * 2 + dy) * rowStride + (p_x + col * 2 + dx)] = p_color;
+					}
+				}
+			}
+		}
+	}
+}
+
+void LegoVideoManager::DrawTextToSurface32(
+	uint8_t* p_dst,
+	int p_pitch,
+	int p_x,
+	int p_y,
+	const char* p_text,
+	uint32_t p_color
+)
+{
+	while (*p_text) {
+		if (*p_text >= '0' && *p_text <= '9') {
+			DrawDigitToBuffer32(p_dst, p_pitch, p_x, p_y, *p_text - '0', p_color);
+			p_x += 10;
+		}
+		else if (*p_text == '.') {
+			uint32_t* pixels = (uint32_t*) p_dst;
+			int rowStride = p_pitch / 4;
+			for (int dy = 0; dy < 2; ++dy) {
+				for (int dx = 0; dx < 2; ++dx) {
+					pixels[(p_y + 10 + dy) * rowStride + (p_x + 2 + dx)] = p_color;
+				}
+			}
+			p_x += 4;
+		}
+		++p_text;
+	}
+}
+
+void LegoVideoManager::SetCursorBitmap(const CursorBitmap* p_cursorBitmap)
+{
+	if (p_cursorBitmap == NULL) {
+		m_drawCursor = FALSE;
+		return;
+	}
+
+	if (m_cursorSurface != NULL) {
+		m_cursorSurface->Release();
+		m_cursorSurface = NULL;
+	}
+
+	m_cursorRect.top = 0;
+	m_cursorRect.left = 0;
+	m_cursorRect.bottom = p_cursorBitmap->height;
+	m_cursorRect.right = p_cursorBitmap->width;
+
+	m_cursorSurface = MxDisplaySurface::CreateCursorSurface(p_cursorBitmap, m_videoParam.GetPalette());
+
+	if (m_cursorSurface == NULL) {
+		m_drawCursor = FALSE;
+		return;
+	}
+
+	m_drawCursor = TRUE;
 }

@@ -1,3 +1,4 @@
+#include "d3drmtexture_impl.h"
 #include "ddpalette_impl.h"
 #include "ddraw_impl.h"
 #include "ddsurface_impl.h"
@@ -18,6 +19,9 @@ DirectDrawSurfaceImpl::~DirectDrawSurfaceImpl()
 	SDL_DestroySurface(m_surface);
 	if (m_palette) {
 		m_palette->Release();
+	}
+	if (m_texture) {
+		m_texture->Release();
 	}
 }
 
@@ -48,6 +52,24 @@ HRESULT DirectDrawSurfaceImpl::Blt(
 	LPDDBLTFX lpDDBltFx
 )
 {
+	if ((dwFlags & DDBLT_COLORFILL) == DDBLT_COLORFILL) {
+		Uint8 a = (lpDDBltFx->dwFillColor >> 24) & 0xFF;
+		Uint8 r = (lpDDBltFx->dwFillColor >> 16) & 0xFF;
+		Uint8 g = (lpDDBltFx->dwFillColor >> 8) & 0xFF;
+		Uint8 b = lpDDBltFx->dwFillColor & 0xFF;
+
+		const SDL_PixelFormatDetails* details = SDL_GetPixelFormatDetails(m_surface->format);
+		Uint32 color = SDL_MapRGBA(details, nullptr, r, g, b, a);
+		if (lpDestRect) {
+			SDL_Rect dstRect = ConvertRect(lpDestRect);
+			SDL_FillSurfaceRect(m_surface, &dstRect, color);
+		}
+		else {
+			SDL_FillSurfaceRect(m_surface, nullptr, color);
+		}
+		return DD_OK;
+	}
+
 	auto other = static_cast<DirectDrawSurfaceImpl*>(lpDDSrcSurface);
 
 	SDL_Rect srcRect = lpSrcRect ? ConvertRect(lpSrcRect) : SDL_Rect{0, 0, other->m_surface->w, other->m_surface->h};
@@ -68,6 +90,9 @@ HRESULT DirectDrawSurfaceImpl::Blt(
 
 	if (blitSource != other->m_surface) {
 		SDL_DestroySurface(blitSource);
+	}
+	if (m_texture) {
+		m_texture->Changed(TRUE, FALSE);
 	}
 	return DD_OK;
 }
@@ -120,7 +145,7 @@ HRESULT DirectDrawSurfaceImpl::GetPalette(LPDIRECTDRAWPALETTE* lplpDDPalette)
 HRESULT DirectDrawSurfaceImpl::GetPixelFormat(LPDDPIXELFORMAT lpDDPixelFormat)
 {
 	memset(lpDDPixelFormat, 0, sizeof(*lpDDPixelFormat));
-	lpDDPixelFormat->dwFlags = DDPF_RGB;
+	lpDDPixelFormat->dwFlags = DDPF_RGB | DDPF_ALPHAPIXELS;
 	const SDL_PixelFormatDetails* details = SDL_GetPixelFormatDetails(m_surface->format);
 	if (details->bits_per_pixel == 8) {
 		lpDDPixelFormat->dwFlags |= DDPF_PALETTEINDEXED8;
@@ -203,18 +228,34 @@ HRESULT DirectDrawSurfaceImpl::SetPalette(LPDIRECTDRAWPALETTE lpDDPalette)
 		MINIWIN_NOT_IMPLEMENTED();
 	}
 
+	if (m_texture) {
+		m_texture->Changed(FALSE, TRUE);
+	}
+
+	lpDDPalette->AddRef();
+
 	if (m_palette) {
 		m_palette->Release();
 	}
 
 	m_palette = lpDDPalette;
 	SDL_SetSurfacePalette(m_surface, ((DirectDrawPaletteImpl*) m_palette)->m_palette);
-	m_palette->AddRef();
 	return DD_OK;
 }
 
 HRESULT DirectDrawSurfaceImpl::Unlock(LPVOID lpSurfaceData)
 {
 	SDL_UnlockSurface(m_surface);
+	if (m_texture) {
+		m_texture->Changed(TRUE, FALSE);
+	}
 	return DD_OK;
+}
+
+IDirect3DRMTexture2* DirectDrawSurfaceImpl::ToTexture()
+{
+	if (!m_texture) {
+		m_texture = new Direct3DRMTextureImpl(this, false);
+	}
+	return m_texture;
 }

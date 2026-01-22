@@ -25,16 +25,6 @@ HRESULT Direct3DRMMeshImpl::Clone(int flags, GUID iid, void** object)
 
 	auto* clone = new Direct3DRMMeshImpl(*this);
 
-	for (auto& group : clone->m_groups) {
-		// Reusing the same texture and material on the new mesh instead of cloning them might not be correct
-		if (group.texture) {
-			group.texture->AddRef();
-		}
-		if (group.material) {
-			group.material->AddRef();
-		}
-	}
-
 	*object = static_cast<IDirect3DRMMesh*>(clone);
 	return DD_OK;
 }
@@ -59,7 +49,7 @@ HRESULT Direct3DRMMeshImpl::AddGroup(
 	MeshGroup group;
 	group.vertexPerFace = vertexPerFace;
 
-	DWORD* src = faceBuffer;
+	unsigned int* src = faceBuffer;
 	group.indices.assign(src, src + faceCount * vertexPerFace);
 
 	m_groups.push_back(std::move(group));
@@ -154,12 +144,13 @@ HRESULT Direct3DRMMeshImpl::SetGroupMaterial(D3DRMGROUPINDEX groupIndex, IDirect
 		return DDERR_INVALIDPARAMS;
 	}
 
+	material->AddRef();
+
 	auto& group = m_groups[groupIndex];
 	if (group.material) {
 		group.material->Release();
 	}
 
-	material->AddRef();
 	m_groups[groupIndex].material = material;
 	return DD_OK;
 }
@@ -170,12 +161,13 @@ HRESULT Direct3DRMMeshImpl::SetGroupTexture(D3DRMGROUPINDEX groupIndex, IDirect3
 		return DDERR_INVALIDPARAMS;
 	}
 
+	texture->AddRef();
+
 	auto& group = m_groups[groupIndex];
 	if (group.texture) {
 		group.texture->Release();
 	}
 
-	texture->AddRef();
 	group.texture = texture;
 	group.version++;
 	return DD_OK;

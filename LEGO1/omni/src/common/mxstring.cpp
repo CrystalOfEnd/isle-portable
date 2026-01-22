@@ -1,7 +1,7 @@
 #include "mxstring.h"
 
 #include "decomp.h"
-#include "mxomni.h"
+#include "mxmain.h"
 
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_platform_defines.h>
@@ -217,7 +217,6 @@ void MxString::MapPathToFilesystem(char* p_path)
 				}
 				else if (j == 1) {
 					SDL_strlcpy(&p_path[i - 1], file.GetData(), file.GetLength() + 1);
-					SDL_Log("Resolved file path to %s", p_path);
 					return true;
 				}
 			}

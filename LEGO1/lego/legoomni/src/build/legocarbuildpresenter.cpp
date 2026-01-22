@@ -18,7 +18,7 @@
 
 #include <SDL3/SDL_stdinc.h>
 
-DECOMP_SIZE_ASSERT(LegoCarBuildAnimPresenter::UnknownListEntry, 0x0c)
+DECOMP_SIZE_ASSERT(LegoCarBuildAnimPresenter::CarBuildPart, 0x0c)
 DECOMP_SIZE_ASSERT(LegoCarBuildAnimPresenter, 0x150)
 
 // FUNCTION: LEGO1 0x10078400
@@ -34,7 +34,7 @@ LegoCarBuildAnimPresenter::LegoCarBuildAnimPresenter()
 	m_shelfFrameBuffer = 0;
 	m_shelfFrameMax = 0;
 	m_shelfFrameInterval = 0;
-	m_unk0x13c = 0;
+	m_flashingPartTimeState = 0;
 	m_carBuildEntity = NULL;
 	m_unk0x144 = -1;
 	m_unk0x148 = -1;
@@ -62,28 +62,28 @@ LegoCarBuildAnimPresenter::~LegoCarBuildAnimPresenter()
 }
 
 // FUNCTION: BETA10 0x100733d0
-inline void LegoCarBuildAnimPresenter::Beta10Inline0x100733d0()
+inline void LegoCarBuildAnimPresenter::UpdateFlashingPartVisibility()
 {
 	MxLong time = Timer()->GetTime();
-	MxLong bvar5;
+	MxLong showFlashingPart;
 
-	if (m_unk0x13c < time) {
-		bvar5 = FALSE;
+	if (m_flashingPartTimeState < time) {
+		showFlashingPart = FALSE;
 
 		// I have no idea why this conditional is so convoluted
-		if (m_unk0x13c & c_bit1) {
-			bvar5 = TRUE;
-			m_unk0x13c = time + 400;
+		if (m_flashingPartTimeState & c_bit1) {
+			showFlashingPart = TRUE;
+			m_flashingPartTimeState = time + 400;
 		}
 		else {
-			m_unk0x13c = time + 200;
+			m_flashingPartTimeState = time + 200;
 		}
 
-		if (bvar5) {
-			m_unk0x13c &= ~c_bit1;
+		if (showFlashingPart) {
+			m_flashingPartTimeState &= ~c_bit1;
 		}
 		else {
-			m_unk0x13c |= c_bit1;
+			m_flashingPartTimeState |= c_bit1;
 		}
 
 		if (m_placedPartCount < m_numberOfParts) {
@@ -98,7 +98,7 @@ inline void LegoCarBuildAnimPresenter::Beta10Inline0x100733d0()
 						const LegoChar* name = roi->GetName();
 
 						if (name && SDL_strcasecmp(wiredName, name) == 0) {
-							if (bvar5) {
+							if (showFlashingPart) {
 								roi->SetVisibility(TRUE);
 							}
 							else {
@@ -129,7 +129,7 @@ void LegoCarBuildAnimPresenter::PutFrame()
 		break;
 	}
 
-	Beta10Inline0x100733d0();
+	UpdateFlashingPartVisibility();
 }
 
 // FUNCTION: LEGO1 0x100788c0
@@ -204,15 +204,15 @@ void LegoCarBuildAnimPresenter::StreamingTickle()
 
 	for (i = 0; i < m_numberOfParts; i++) {
 		if (m_placedPartCount == i) {
-			FUN_10079680(m_parts[i].m_wiredName);
+			ShowBuildPartByName(m_parts[i].m_wiredName);
 		}
 		else {
-			FUN_100795d0(m_parts[i].m_wiredName);
+			HideBuildPartByName(m_parts[i].m_wiredName);
 		}
 
 		if (i < m_placedPartCount) {
-			FUN_10079050(i);
-			FUN_10079680(m_parts[i].m_name);
+			MakePartPlaced(i);
+			ShowBuildPartByName(m_parts[i].m_name);
 		}
 
 		LegoChar* name = m_parts[i].m_wiredName;
@@ -318,10 +318,10 @@ MxResult LegoCarBuildAnimPresenter::Serialize(LegoStorage* p_storage)
 
 // FUNCTION: LEGO1 0x10079050
 // FUNCTION: BETA10 0x1007151e
-void LegoCarBuildAnimPresenter::FUN_10079050(MxS16 p_index)
+void LegoCarBuildAnimPresenter::MakePartPlaced(MxS16 p_index)
 {
 	SwapNodesByName(m_parts[p_index].m_wiredName, m_parts[p_index].m_name);
-	FUN_100795d0(m_parts[p_index].m_wiredName);
+	HideBuildPartByName(m_parts[p_index].m_wiredName);
 }
 
 // FUNCTION: LEGO1 0x10079090
@@ -384,7 +384,7 @@ void LegoCarBuildAnimPresenter::InitBuildPlatform()
 	}
 
 	assert(m_numberOfParts);
-	m_parts = new UnknownListEntry[m_numberOfParts];
+	m_parts = new CarBuildPart[m_numberOfParts];
 	assert(m_parts);
 
 	// Go through and add the wired name of each part
@@ -447,7 +447,7 @@ void LegoCarBuildAnimPresenter::InitBuildPlatform()
 
 // FUNCTION: LEGO1 0x100795d0
 // FUNCTION: BETA10 0x10071d96
-void LegoCarBuildAnimPresenter::FUN_100795d0(LegoChar* p_param)
+void LegoCarBuildAnimPresenter::HideBuildPartByName(LegoChar* p_param)
 {
 	LegoAnimNodeData* data = FindNodeDataByName(m_anim->GetRoot(), p_param);
 
@@ -469,7 +469,7 @@ void LegoCarBuildAnimPresenter::FUN_100795d0(LegoChar* p_param)
 
 // FUNCTION: LEGO1 0x10079680
 // FUNCTION: BETA10 0x10071ec5
-void LegoCarBuildAnimPresenter::FUN_10079680(LegoChar* p_param)
+void LegoCarBuildAnimPresenter::ShowBuildPartByName(LegoChar* p_param)
 {
 	LegoAnimNodeData* data = FindNodeDataByName(m_anim->GetRoot(), p_param);
 
@@ -536,7 +536,7 @@ LegoTreeNode* LegoCarBuildAnimPresenter::FindNodeByName(LegoTreeNode* p_treeNode
 
 // FUNCTION: LEGO1 0x10079790
 // FUNCTION: BETA10 0x100720a3
-void LegoCarBuildAnimPresenter::FUN_10079790(const LegoChar* p_name)
+void LegoCarBuildAnimPresenter::AddPartToBuildByName(const LegoChar* p_name)
 {
 	MxS16 i;
 	LegoChar buffer[40];
@@ -553,13 +553,13 @@ void LegoCarBuildAnimPresenter::FUN_10079790(const LegoChar* p_name)
 		strcpy(m_parts[i].m_name, buffer);
 		Swap(m_parts[m_placedPartCount].m_objectId, m_parts[i].m_objectId);
 	}
-	FUN_10079050(m_placedPartCount);
+	MakePartPlaced(m_placedPartCount);
 	m_placedPartCount++;
 
 	((LegoCarBuild*) m_currentWorld)->SetPlacedPartCount(m_placedPartCount);
 
 	if (m_placedPartCount < m_numberOfParts) {
-		FUN_10079680(m_parts[m_placedPartCount].m_wiredName);
+		ShowBuildPartByName(m_parts[m_placedPartCount].m_wiredName);
 	}
 }
 
@@ -579,10 +579,10 @@ void LegoCarBuildAnimPresenter::RotateAroundYAxis(MxFloat p_angle)
 		newRotation.EqualsHamiltonProduct(currentRotation, additionalRotation);
 
 		if (newRotation[3] < 0.9999) {
-			rotationKey->FUN_100739a0(TRUE);
+			rotationKey->SetActive(TRUE);
 		}
 		else {
-			rotationKey->FUN_100739a0(FALSE);
+			rotationKey->SetActive(FALSE);
 		}
 
 		m_platformAnimNodeData->GetRotationKey(0)->SetX(newRotation[0]);
@@ -646,7 +646,7 @@ MxBool LegoCarBuildAnimPresenter::StringEqualsShelf(const LegoChar* p_string)
 
 // FUNCTION: LEGO1 0x10079c30
 // FUNCTION: BETA10 0x100726a6
-MxBool LegoCarBuildAnimPresenter::FUN_10079c30(const LegoChar* p_name)
+MxBool LegoCarBuildAnimPresenter::IsNextPartToPlace(const LegoChar* p_name)
 {
 	if (PartIsPlaced(p_name)) {
 		return FALSE;
@@ -710,7 +710,7 @@ void LegoCarBuildAnimPresenter::SetPartObjectIdByName(const LegoChar* p_name, Mx
 
 // FUNCTION: LEGO1 0x10079e20
 // FUNCTION: BETA10 0x10072959
-const BoundingSphere& LegoCarBuildAnimPresenter::FUN_10079e20()
+const BoundingSphere& LegoCarBuildAnimPresenter::GetTargetBoundingSphere()
 {
 	LegoROI* roi = m_carBuildEntity->GetROI();
 	return roi->FindChildROI(m_parts[m_placedPartCount].m_wiredName, roi)->GetWorldBoundingSphere();

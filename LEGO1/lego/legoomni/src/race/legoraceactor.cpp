@@ -19,7 +19,7 @@ Mx3DPointFloat LegoRaceActor::g_unk0x10102b08 = Mx3DPointFloat(0.0, 2.0, 0.0);
 // FUNCTION: LEGO1 0x100145d0
 LegoRaceActor::LegoRaceActor()
 {
-	m_unk0x70 = 0;
+	m_lastPathStruct = 0;
 	m_unk0x08 = 0;
 }
 
@@ -31,8 +31,8 @@ MxS32 LegoRaceActor::VTable0x68(Vector3& p_v1, Vector3& p_v2, Vector3& p_v3)
 
 	if (m_userNavFlag && result) {
 		MxLong time = Timer()->GetTime();
-		if (time - g_unk0x100f3308 > 1000) {
-			g_unk0x100f3308 = time;
+		if (time - g_timeLastHitSoundPlayed > 1000) {
+			g_timeLastHitSoundPlayed = time;
 			const char* soundKey = VariableTable()->GetVariable(g_strHIT_ACTOR_SOUND);
 
 			if (soundKey && *soundKey) {

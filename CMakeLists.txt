@@ -2,10 +2,27 @@ cmake_minimum_required(VERSION 3.25...4.0 FATAL_ERROR)
 
 project(isle LANGUAGES CXX C VERSION 0.1)
 
+if (IOS)
+  set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
+  add_compile_definitions(IOS)
+endif()
+
+if (WINDOWS_STORE)
+  add_compile_definitions(WINDOWS_STORE)
+endif()
+
 if (EMSCRIPTEN)
   add_compile_options(-pthread)
-  add_link_options(-sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=2gb -sUSE_PTHREADS=1 -sPROXY_TO_PTHREAD=1 -sPTHREAD_POOL_SIZE_STRICT=0 -sFORCE_FILESYSTEM=1 -sWASMFS=1 -sEXIT_RUNTIME=1)
+  add_link_options(-sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=2gb -sUSE_PTHREADS=1 -sPROXY_TO_PTHREAD=1 -sOFFSCREENCANVAS_SUPPORT=1 -sPTHREAD_POOL_SIZE_STRICT=0 -sFORCE_FILESYSTEM=1 -sWASMFS=1 -sEXIT_RUNTIME=1)
   set(SDL_PTHREADS ON CACHE BOOL "Enable SDL pthreads" FORCE)
+endif()
+
+if (NINTENDO_SWITCH)
+  set(CMAKE_TOOLCHAIN_FILE "${DEVKITPRO}/cmake/Switch.cmake" CACHE PATH "toolchain file")
+  add_compile_definitions(__SWITCH__)
+  add_compile_definitions(SDL_PLATFORM_SWITCH)
+  add_compile_definitions(SDL_VIDEO_DRIVER_SWITCH)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
@@ -13,6 +30,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(CheckCXXSourceCompiles)
 include(CMakeDependentOption)
 include(CMakePushCheckState)
+include(CMake/detectcpu.cmake)
+
+DetectTargetCPUArchitectures(ISLE_CPUS)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,71 +46,110 @@ else()
 endif()
 
 find_program(SDL_SHADERCROSS_BIN NAMES "shadercross")
-find_package(Python3 3.11 COMPONENTS Interpreter)
+find_package(Python3 3.12 COMPONENTS Interpreter)
 
 option(ISLE_BUILD_APP "Build isle application" ON)
+option(ISLE_BUILD_ASSETS "Build assets from the /assets directory" OFF)
 option(ISLE_ASAN "Enable Address Sanitizer" OFF)
 option(ISLE_UBSAN "Enable Undefined Behavior Sanitizer" OFF)
 option(ISLE_WERROR "Treat warnings as errors" OFF)
-option(ISLE_DEBUG "Enable imgui debug" ON)
 cmake_dependent_option(ISLE_USE_DX5 "Build with internal DirectX 5 SDK" "${NOT_MINGW}" "WIN32;CMAKE_SIZEOF_VOID_P EQUAL 4" OFF)
 cmake_dependent_option(ISLE_MINIWIN "Use miniwin" ON "NOT ISLE_USE_DX5" OFF)
-cmake_dependent_option(ISLE_BUILD_CONFIG "Build CONFIG.EXE application" ON "MSVC OR ISLE_MINIWIN" OFF)
+cmake_dependent_option(ISLE_EXTENSIONS "Use extensions" ON "NOT ISLE_USE_DX5;NOT WINDOWS_STORE" OFF)
+cmake_dependent_option(ISLE_BUILD_CONFIG "Build CONFIG.EXE application" ON "MSVC OR ISLE_MINIWIN;NOT NINTENDO_3DS;NOT NINTENDO_SWITCH;NOT WINDOWS_STORE;NOT VITA" OFF)
 cmake_dependent_option(ISLE_COMPILE_SHADERS "Compile shaders" ON "SDL_SHADERCROSS_BIN;TARGET Python3::Interpreter" OFF)
-option(CMAKE_POSITION_INDEPENDENT_CODE "Build with -fPIC" ON)
+cmake_dependent_option(CMAKE_POSITION_INDEPENDENT_CODE "Build with -fPIC" ON "NOT VITA" OFF)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy")
 option(DOWNLOAD_DEPENDENCIES "Download dependencies" ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" CACHE PATH "Directory where to put executables and dll")
 set(ISLE_EMSCRIPTEN_HOST "" CACHE STRING "Host URL for Emscripten streaming (e.g., https://test.com)")
-cmake_dependent_option(BUILD_SHARED_LIBS "Build lego1 as a shared library" ON "NOT EMSCRIPTEN" OFF)
+cmake_dependent_option(BUILD_SHARED_LIBS "Build lego1 as a shared library" ON "NOT EMSCRIPTEN;NOT VITA" OFF)
 
 message(STATUS "Isle app:               ${ISLE_BUILD_APP}")
 message(STATUS "Config app:             ${ISLE_BUILD_CONFIG}")
 message(STATUS "Internal DirectX5 SDK:  ${ISLE_USE_DX5}")
 message(STATUS "Internal miniwin:       ${ISLE_MINIWIN}")
-message(STATUS "Isle debugging:         ${ISLE_DEBUG}")
+message(STATUS "Isle extensions:        ${ISLE_EXTENSIONS}")
 message(STATUS "Compile shaders:        ${ISLE_COMPILE_SHADERS}")
 
+add_library(Isle::iniparser INTERFACE IMPORTED)
+
 if (DOWNLOAD_DEPENDENCIES)
-    # FetchContent downloads and configures dependencies
-    message(STATUS "Fetching SDL3 and iniparser. This might take a while...")
-    include(FetchContent)
-    FetchContent_Declare(
+  # FetchContent downloads and configures dependencies
+  message(STATUS "Fetching SDL3 and iniparser. This might take a while...")
+  include(FetchContent)
+
+  if(ANDROID)
+    # Built by Gradle
+    find_package(SDL3 REQUIRED CONFIG COMPONENTS Shared)
+  else()
+    if (WINDOWS_STORE)
+      FetchContent_Declare(
         SDL3
-        GIT_REPOSITORY "https://github.com/libsdl-org/SDL.git"
+        GIT_REPOSITORY "https://github.com/Helloyunho/SDL3-uwp.git"
         GIT_TAG "main"
         EXCLUDE_FROM_ALL
-    )
-    FetchContent_MakeAvailable(SDL3)
-
-    FetchContent_Declare(
-        iniparser
-        GIT_REPOSITORY "https://gitlab.com/iniparser/iniparser.git"
-        GIT_TAG "main"
+      )
+    elseif (NINTENDO_SWITCH)
+      FetchContent_Declare(
+        SDL3
+        # Official repo missing Threads support?
+        #GIT_REPOSITORY "https://github.com/devkitPro/SDL.git"
+        #GIT_TAG "switch-sdl-3.2"
+        #GIT_REPOSITORY "https://github.com/vs49688/SDL.git"
+        GIT_REPOSITORY "https://github.com/SnepOMatic/SDL3-Switch.git"
+        GIT_TAG "switch-sdl-3.2.14"
         EXCLUDE_FROM_ALL
-    )
-    block()
-      set(BUILD_DOCS off)
-      set(BUILD_SHARED_LIBS off)
-      FetchContent_MakeAvailable(iniparser)
-    endblock()
-else()
-    # find_package looks for already-installed system packages.
-    # Configure with `-DCMAKE_PREFIX_PATH="/path/to/package1;/path/to/package2"`
-    # to add search paths.
-    find_package(SDL3 CONFIG REQUIRED)
-
-    find_package(iniparser CONFIG COMPONENTS static)
-    if (NOT TARGET iniparser-static)
-        find_package(iniparser REQUIRED MODULE COMPONENTS static)
+      )
+      set(CMAKE_DISABLE_PRECOMPILE_HEADERS ON CACHE BOOL "Disable PCH globally" FORCE)
+    else()
+      set(ISLE_SDL3_GIT_REPO "https://github.com/libsdl-org/SDL.git" CACHE STRING "The SDL3 git repo")
+      set(ISLE_SDL3_GIT_TAG "main" CACHE STRING "The SDL3 git tag")
+      FetchContent_Declare(
+        SDL3
+        GIT_REPOSITORY "${ISLE_SDL3_GIT_REPO}"
+        GIT_TAG "${ISLE_SDL3_GIT_TAG}"
+        UPDATE_DISCONNECTED TRUE
+        EXCLUDE_FROM_ALL
+      )
     endif()
+    FetchContent_MakeAvailable(SDL3)
+  endif()
+
+  FetchContent_Declare(
+    iniparser
+    GIT_REPOSITORY "https://gitlab.com/iniparser/iniparser.git"
+    GIT_TAG "main"
+    UPDATE_DISCONNECTED TRUE
+    EXCLUDE_FROM_ALL
+  )
+  block()
+    set(BUILD_DOCS off)
+    set(BUILD_SHARED_LIBS off)
+    FetchContent_MakeAvailable(iniparser)
+    target_link_libraries(Isle::iniparser INTERFACE iniparser-static)
+  endblock()
+else()
+  # find_package looks for already-installed system packages.
+  # Configure with `-DCMAKE_PREFIX_PATH="/path/to/package1;/path/to/package2"`
+  # to add search paths.
+  find_package(SDL3 CONFIG REQUIRED)
+
+  find_package(iniparser REQUIRED CONFIG)
+  if(TARGET iniparser-shared)
+    target_link_libraries(Isle::iniparser INTERFACE iniparser-shared)
+  elseif(TARGET iniparser-static)
+    target_link_libraries(Isle::iniparser INTERFACE iniparser-static)
+  endif()
+
+  find_package(libweaver REQUIRED)
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if (ENABLE_CLANG_TIDY)
-    find_program(CLANG_TIDY_BIN NAMES "clang-tidy" ENV "LLVM_ROOT" REQUIRED)
-    set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY_BIN}")
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_BIN}")
+  find_program(CLANG_TIDY_BIN NAMES "clang-tidy" ENV "LLVM_ROOT" REQUIRED)
+  set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY_BIN}")
+  set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_BIN}")
 endif()
 
 if (ISLE_ASAN)
@@ -108,26 +167,26 @@ add_subdirectory(miniwin EXCLUDE_FROM_ALL)
 set(isle_targets)
 
 function(add_cxx_warning WARNING)
-    if (ISLE_WERROR)
-        set(compiler_option "-Werror=${WARNING}")
-    else()
-        set(compiler_option "-W${WARNING}")
-    endif()
-    string(MAKE_C_IDENTIFIER "COMPILER_SUPPORTS${compiler_option}" varname)
+  if (ISLE_WERROR)
+    set(compiler_option "-Werror=${WARNING}")
+  else()
+    set(compiler_option "-W${WARNING}")
+  endif()
+  string(MAKE_C_IDENTIFIER "COMPILER_SUPPORTS${compiler_option}" varname)
 
-    cmake_push_check_state(RESET)
-    set(CMAKE_REQUIRED_FLAGS "${compiler_option} ")
-    if (MSVC)
-        string(APPEND CMAKE_REQUIRED_FLAGS "/WX")
-    else()
-        string(APPEND CMAKE_REQUIRED_FLAGS "-Werror")
-    endif()
-    check_cxx_source_compiles("int main() { return 0; }" ${varname})
-    cmake_pop_check_state()
+  cmake_push_check_state(RESET)
+  set(CMAKE_REQUIRED_FLAGS "${compiler_option} ")
+  if (MSVC)
+    string(APPEND CMAKE_REQUIRED_FLAGS "/WX")
+  else()
+    string(APPEND CMAKE_REQUIRED_FLAGS "-Werror")
+  endif()
+  check_cxx_source_compiles("int main() { return 0; }" ${varname})
+  cmake_pop_check_state()
 
-    if (${varname})
-        add_compile_options(${compiler_option})
-    endif()
+  if (${varname})
+    add_compile_options(${compiler_option})
+  endif()
 endfunction()
 
 add_subdirectory(3rdparty EXCLUDE_FROM_ALL SYSTEM)
@@ -144,9 +203,11 @@ target_include_directories(Vec::Vec INTERFACE "${CMAKE_SOURCE_DIR}/3rdparty/vec"
 add_library(lego1
   LEGO1/main.cpp
 )
-target_precompile_headers(lego1 PRIVATE "LEGO1/lego1_pch.h")
+target_include_directories(lego1 PRIVATE "${CMAKE_SOURCE_DIR}/LEGO1")
+target_precompile_headers(lego1 PRIVATE "<lego1_pch.h>")
 set_property(TARGET lego1 PROPERTY DEFINE_SYMBOL "LEGO1_DLL")
 target_include_directories(lego1 PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/util>")
+target_include_directories(lego1 PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/extensions/include>")
 target_include_directories(lego1 PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/LEGO1>")
 target_include_directories(lego1 PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/LEGO1/omni/include>")
 target_include_directories(lego1 PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/LEGO1/lego/sources>")
@@ -155,6 +216,8 @@ target_include_directories(lego1 PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/L
 target_link_libraries(lego1 PRIVATE SDL3::SDL3)
 target_link_libraries(lego1 PUBLIC SDL3::Headers)
 target_link_libraries(lego1 PRIVATE $<$<BOOL:${ISLE_USE_DX5}>:DirectX5::DirectX5>)
+# Allow unconditional include of miniwin/miniwind3d.h
+target_link_libraries(lego1 PRIVATE miniwin-headers)
 if(WIN32)
   set_property(TARGET lego1 PROPERTY PREFIX "")
 endif()
@@ -285,10 +348,10 @@ target_sources(lego1 PRIVATE
   LEGO1/omni/src/common/mxcompositepresenter.cpp
   LEGO1/omni/src/common/mxcore.cpp
   LEGO1/omni/src/common/mxdebug.cpp
-  LEGO1/omni/src/common/mxmediamanager.cpp
   LEGO1/omni/src/common/mxmediapresenter.cpp
   LEGO1/omni/src/common/mxmisc.cpp
   LEGO1/omni/src/common/mxobjectfactory.cpp
+  LEGO1/omni/src/common/mxpresentationmanager.cpp
   LEGO1/omni/src/common/mxpresenter.cpp
   LEGO1/omni/src/common/mxstring.cpp
   LEGO1/omni/src/common/mxticklemanager.cpp
@@ -299,7 +362,7 @@ target_sources(lego1 PRIVATE
   LEGO1/omni/src/entity/mxentity.cpp
   LEGO1/omni/src/event/mxeventmanager.cpp
   LEGO1/omni/src/event/mxeventpresenter.cpp
-  LEGO1/omni/src/main/mxomni.cpp
+  LEGO1/omni/src/main/mxmain.cpp
   LEGO1/omni/src/main/mxomnicreateflags.cpp
   LEGO1/omni/src/main/mxomnicreateparam.cpp
   LEGO1/omni/src/notify/mxactionnotificationparam.cpp
@@ -434,9 +497,6 @@ target_sources(lego1 PRIVATE
   LEGO1/lego/legoomni/src/race/raceskel.cpp
   LEGO1/lego/legoomni/src/video/legoanimpresenter.cpp
   LEGO1/lego/legoomni/src/video/legoflctexturepresenter.cpp
-  LEGO1/lego/legoomni/src/video/legohideanimpresenter.cpp
-  LEGO1/lego/legoomni/src/video/legolocomotionanimpresenter.cpp
-  LEGO1/lego/legoomni/src/video/legoloopinganimpresenter.cpp
   LEGO1/lego/legoomni/src/video/legomodelpresenter.cpp
   LEGO1/lego/legoomni/src/video/legopalettepresenter.cpp
   LEGO1/lego/legoomni/src/video/legopartpresenter.cpp
@@ -464,11 +524,31 @@ if (NOT ISLE_MINIWIN)
   target_compile_definitions(lego1 PRIVATE DIRECTINPUT_VERSION=0x0500)
 endif()
 
+if (ISLE_EXTENSIONS)
+  target_link_libraries(lego1 PRIVATE libweaver::libweaver)
+  target_compile_definitions(lego1 PUBLIC EXTENSIONS)
+  target_sources(lego1 PRIVATE
+    extensions/src/extensions.cpp
+    extensions/src/siloader.cpp
+    extensions/src/textureloader.cpp
+  )
+endif()
+
 if (ISLE_BUILD_APP)
+
+  if (ANDROID)
+    function(add_executable TARGET PLATFORM)
+      add_library(${TARGET} SHARED ${ARGN})
+    endfunction()
+  endif()
+
   add_executable(isle WIN32
     ISLE/res/isle.rc
     ISLE/isleapp.cpp
     ISLE/islefiles.cpp
+    ${CMAKE_SOURCE_DIR}/ISLE/res/arrow_bmp.h
+    ${CMAKE_SOURCE_DIR}/ISLE/res/busy_bmp.h
+    ${CMAKE_SOURCE_DIR}/ISLE/res/no_bmp.h
   )
   list(APPEND isle_targets isle)
   if (WIN32)
@@ -484,10 +564,13 @@ if (ISLE_BUILD_APP)
   target_link_libraries(isle PRIVATE $<$<BOOL:${ISLE_USE_DX5}>:DirectX5::DirectX5>)
 
   # Link SDL and iniparser
-  target_link_libraries(isle PRIVATE SDL3::SDL3 iniparser-static)
+  target_link_libraries(isle PRIVATE SDL3::SDL3 Isle::iniparser)
 
   # Allow unconditional include of miniwin/miniwindevice.h
   target_link_libraries(isle PRIVATE miniwin-headers)
+
+  # Vector math
+  target_link_libraries(isle PRIVATE Vec::Vec)
 
   # Link DSOUND and WINMM
   if (WIN32)
@@ -495,62 +578,143 @@ if (ISLE_BUILD_APP)
   endif()
   # Link LEGO1
   target_link_libraries(isle PRIVATE lego1)
-  if(ISLE_DEBUG)
-    target_sources(isle PRIVATE
-      ISLE/isledebug.cpp
-    )
-    target_compile_definitions(isle PRIVATE ISLE_DEBUG)
-    target_link_libraries(isle PRIVATE imgui)
-    find_path(valgrind_INCLUDE_PATH NAMES valgrind/callgrind.h)
-    if(valgrind_INCLUDE_PATH)
-      # Run isle under valgrind to create a profile. Use e.g. kcachegrind to view the profile.
-      # > valgrind --tool=callgrind --dump-instr=yes --simulate-cache=yes --collect-jumps=yes \
-      # >         --collect-atstart=no --instr-atstart=no ./isle --debug
-      target_compile_definitions(isle PRIVATE ISLE_VALGRIND)
-      target_include_directories(isle PRIVATE ${valgrind_INCLUDE_PATH})
-    endif()
-  endif()
   if(EMSCRIPTEN)
     target_sources(isle PRIVATE
+      ISLE/emscripten/config.cpp
       ISLE/emscripten/events.cpp
       ISLE/emscripten/filesystem.cpp
+      ISLE/emscripten/haptic.cpp
       ISLE/emscripten/messagebox.cpp
+      ISLE/emscripten/window.cpp
     )
     target_compile_definitions(isle PRIVATE "ISLE_EMSCRIPTEN_HOST=\"${ISLE_EMSCRIPTEN_HOST}\"")
     set_property(TARGET isle PROPERTY SUFFIX ".html")
+  endif()
+  if(NINTENDO_3DS)
+    target_sources(isle PRIVATE
+      ISLE/3ds/apthooks.cpp
+      ISLE/3ds/config.cpp
+    )
+  endif()
+  if(NINTENDO_SWITCH)
+    target_sources(isle PRIVATE
+      ISLE/switch/config.cpp
+    )
+  endif()
+  if(WINDOWS_STORE)
+    target_sources(isle PRIVATE
+      ISLE/xbox_one_series/config.cpp
+    )
+  endif()
+  if (IOS)
+    target_sources(isle PRIVATE
+      ISLE/ios/config.cpp
+    )
+  endif()
+  if (ANDROID)
+    target_sources(isle PRIVATE
+            ISLE/android/config.cpp
+    )
+  endif()
+  if(VITA)
+    target_sources(isle PRIVATE
+      ISLE/vita/config.cpp
+      ISLE/vita/messagebox.cpp
+    )
+  endif()
+  if(Python3_FOUND)
+    if(NOT DEFINED PYTHON_PIL_AVAILABLE)
+      execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "import PIL; print('pil')"
+        RESULT_VARIABLE PIL_RESULT
+        OUTPUT_VARIABLE PIL_OUTPUT
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+      if(PIL_RESULT EQUAL 0 AND PIL_OUTPUT STREQUAL "pil")
+        set(PIL_AVAILABLE 1)
+      else()
+        message(STATUS "Python PIL not found, using pre-generated headers.")
+        set(PIL_AVAILABLE 0)
+      endif()
+      set(PYTHON_PIL_AVAILABLE ${PIL_AVAILABLE} CACHE BOOL "Is Python3 Pillow available?")
+    endif()
+    if(PYTHON_PIL_AVAILABLE)
+      add_custom_command(
+        OUTPUT
+          ${CMAKE_SOURCE_DIR}/ISLE/res/arrow_bmp.h
+          ${CMAKE_SOURCE_DIR}/ISLE/res/busy_bmp.h
+          ${CMAKE_SOURCE_DIR}/ISLE/res/no_bmp.h
+        COMMAND ${Python3_EXECUTABLE} tools/curpng2h.py ISLE/res/arrow.png ISLE/res/busy.png ISLE/res/no.png
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        DEPENDS
+          ${CMAKE_SOURCE_DIR}/tools/curpng2h.py
+          ${CMAKE_SOURCE_DIR}/ISLE/res/arrow.png
+          ${CMAKE_SOURCE_DIR}/ISLE/res/busy.png
+          ${CMAKE_SOURCE_DIR}/ISLE/res/no.png
+      )
+    endif()
   endif()
 endif()
 
 if (ISLE_BUILD_CONFIG)
   find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
   qt_standard_project_setup()
-  qt_add_executable(config WIN32
+  qt_add_executable(isle-config WIN32
     LEGO1/mxdirectx/mxdirectxinfo.cpp
     LEGO1/mxdirectx/legodxinfo.cpp
-    CONFIG/config.cpp
-    CONFIG/AboutDlg.cpp
-    CONFIG/MainDlg.cpp
-    CONFIG/detectdx5.cpp
-    CONFIG/res/config.rc
-    CONFIG/res/config.qrc
+    CONFIG/qt/config.cpp
+    CONFIG/qt/AboutDlg.cpp
+    CONFIG/qt/MainDlg.cpp
+    CONFIG/qt/detectdx5.cpp
+    CONFIG/qt/res/config.rc
+    CONFIG/qt/res/config.qrc
   )
-  target_link_libraries(config PRIVATE Qt6::Core Qt6::Widgets)
-  set_property(TARGET config PROPERTY AUTOMOC ON)
-  set_property(TARGET config PROPERTY AUTORCC ON)
-  set_property(TARGET config PROPERTY AUTOUIC ON)
-  set_property(TARGET config PROPERTY AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/CONFIG/res")
-  list(APPEND isle_targets config)
-  target_compile_definitions(config PRIVATE _AFXDLL MXDIRECTX_FOR_CONFIG)
-  target_include_directories(config PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/LEGO1")
-  target_include_directories(config PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/util>")
+  target_link_libraries(isle-config PRIVATE Qt6::Core Qt6::Widgets)
+  set_property(TARGET isle-config PROPERTY AUTOMOC ON)
+  set_property(TARGET isle-config PROPERTY AUTORCC ON)
+  set_property(TARGET isle-config PROPERTY AUTOUIC ON)
+  set_property(TARGET isle-config PROPERTY AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/CONFIG/qt/res")
+  list(APPEND isle_targets isle-config)
+  target_compile_definitions(isle-config PRIVATE _AFXDLL MXDIRECTX_FOR_CONFIG)
+  target_include_directories(isle-config PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/LEGO1")
+  target_include_directories(isle-config PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/util>")
   if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14)
-    target_link_libraries(config PRIVATE DirectX5::DirectX5)
+    target_link_libraries(isle-config PRIVATE DirectX5::DirectX5)
   endif()
-  target_compile_definitions(config PRIVATE DIRECT3D_VERSION=0x500)
-  target_link_libraries(config PRIVATE SDL3::SDL3 iniparser-static)
+  target_compile_definitions(isle-config PRIVATE DIRECT3D_VERSION=0x500)
+  target_link_libraries(isle-config PRIVATE SDL3::SDL3 Isle::iniparser)
   if (NOT ISLE_MINIWIN)
-    target_link_libraries(config PRIVATE ddraw dxguid)
+    target_link_libraries(isle-config PRIVATE ddraw dxguid)
   endif()
+endif()
+
+if(ISLE_BUILD_ASSETS)
+  message(STATUS "Asset building is enabled")
+  set(GENERATED_ASSETS_DIR "${CMAKE_BINARY_DIR}/assets")
+  set(GENERATED_ASSETS_DEPFILE "${GENERATED_ASSETS_DIR}/assets.d")
+
+  add_executable(asset_generator EXCLUDE_FROM_ALL
+    assets/main.cpp
+  )
+  target_link_libraries(asset_generator PRIVATE libweaver)
+  target_include_directories(asset_generator PRIVATE "${CMAKE_SOURCE_DIR}/util" "${CMAKE_SOURCE_DIR}/LEGO1/omni/include" "${CMAKE_SOURCE_DIR}/LEGO1" "${CMAKE_SOURCE_DIR}/LEGO1/lego/sources")
+
+  add_custom_command(
+    OUTPUT  ${GENERATED_ASSETS_DIR}/.stamp
+    DEPFILE ${GENERATED_ASSETS_DEPFILE}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED_ASSETS_DIR}
+    COMMAND $<TARGET_FILE:asset_generator> ${GENERATED_ASSETS_DIR} ${GENERATED_ASSETS_DEPFILE}
+    COMMAND ${CMAKE_COMMAND} -E touch ${GENERATED_ASSETS_DIR}/.stamp
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/assets
+    DEPENDS asset_generator
+    COMMENT "Generating assets into ${GENERATED_ASSETS_DIR}/"
+    VERBATIM
+  )
+
+  add_custom_target(build_assets ALL
+    DEPENDS ${GENERATED_ASSETS_DIR}/.stamp
+  )
 endif()
 
 if (ISLE_MINIWIN)
@@ -563,8 +727,14 @@ if (MSVC)
     if (TARGET isle)
       target_compile_definitions(isle PRIVATE "_CRT_SECURE_NO_WARNINGS")
     endif()
-    if (TARGET config)
-      target_compile_definitions(config PRIVATE "_CRT_SECURE_NO_WARNINGS")
+    if (TARGET isle-config)
+      target_compile_definitions(isle-config PRIVATE "_CRT_SECURE_NO_WARNINGS")
+    endif()
+    if (TARGET iniparser-static)
+      target_compile_definitions(iniparser-static PRIVATE "_CRT_SECURE_NO_WARNINGS")
+    endif()
+    if (TARGET libsmacker)
+      target_compile_definitions(libsmacker PRIVATE "_CRT_SECURE_NO_WARNINGS")
     endif()
   endif()
   # Visual Studio 2017 version 15.7 needs "/Zc:__cplusplus" for __cplusplus
@@ -573,8 +743,11 @@ if (MSVC)
     if (TARGET isle)
       target_compile_options(isle PRIVATE "-Zc:__cplusplus")
     endif()
-    if (TARGET config)
-      target_compile_options(config PRIVATE "-Zc:__cplusplus")
+    if (TARGET isle-config)
+      target_compile_options(isle-config PRIVATE "-Zc:__cplusplus")
+    endif()
+    if (TARGET asset_generator)
+      target_compile_options(asset_generator PRIVATE "-Zc:__cplusplus")
     endif()
   endif()
 endif()
@@ -611,7 +784,7 @@ endif()
 set(install_extra_targets)
 if(DOWNLOAD_DEPENDENCIES)
   get_property(sdl3_type TARGET SDL3::SDL3 PROPERTY TYPE)
-  if(sdl3_type STREQUAL "SHARED_LIBRARY")
+  if(sdl3_type STREQUAL "SHARED_LIBRARY" AND NOT ANDROID)
     list(APPEND install_extra_targets "SDL3-shared")
   endif()
 endif()
@@ -623,17 +796,52 @@ else()
   include(GNUInstallDirs)
 endif()
 
-set(ISLE_PACKAGE_NAME "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" CACHE STRING "Platform name of the package")
+string(REPLACE ";" "-" ISLE_CPUS_STRING "${ISLE_CPUS}")
+string(TOLOWER "${ISLE_CPUS_STRING}" ISLE_CPUS_STRING)
+if (WINDOWS_STORE)
+  set(ISLE_PACKAGE_NAME "Xbox_One_Series_XS-${ISLE_CPUS_STRING}" CACHE STRING "Platform name of the package")
+else()
+  set(ISLE_PACKAGE_NAME "${CMAKE_SYSTEM_NAME}-${ISLE_CPUS_STRING}" CACHE STRING "Platform name of the package")
+endif()
 if(BUILD_SHARED_LIBS)
   list(APPEND install_extra_targets lego1)
 endif()
-install(TARGETS isle ${install_extra_targets}
-  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-)
-if (ISLE_BUILD_CONFIG)
-  install(TARGETS config
+if (NOT (NINTENDO_3DS OR WINDOWS_STORE OR VITA))
+  install(TARGETS isle ${install_extra_targets}
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    BUNDLE DESTINATION "."
+  )
+  if(APPLE)
+  elseif(UNIX)
+    set(rel_libpath "${CMAKE_INSTALL_FULL_LIBDIR}")
+    cmake_path(RELATIVE_PATH rel_libpath BASE_DIRECTORY "${CMAKE_INSTALL_FULL_BINDIR}")
+    set_property(TARGET isle ${install_extra_targets} APPEND PROPERTY INSTALL_RPATH "$ORIGIN/${rel_libpath}")
+  endif()
+endif()
+if (ISLE_BUILD_CONFIG)
+  if(WIN32)
+    find_program(WINDEPLOYQT_EXECUTABLE windeployqt)
+    if(WINDEPLOYQT_EXECUTABLE)
+      install(CODE "message(STATUS \"Running windeployqt with minimal dependencies\")
+        execute_process(COMMAND \"${WINDEPLOYQT_EXECUTABLE}\"
+          \"$<TARGET_FILE:isle-config>\"
+          --dir QTLibs
+          --no-compiler-runtime
+          --no-opengl-sw
+          --no-system-d3d-compiler
+          --no-translations
+          --no-quick-import
+        )"
+      )
+      install(DIRECTORY "Build/QTLibs/" DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    else()
+      message(STATUS "windeployqt not found: Qt binaries will not be installed")
+    endif()
+  endif()
+  install(TARGETS isle-config
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    BUNDLE DESTINATION "."
   )
 endif()
 if(EMSCRIPTEN)
@@ -642,11 +850,139 @@ if(EMSCRIPTEN)
   )
 endif()
 
+add_subdirectory(packaging)
+
 set(CPACK_PACKAGE_DIRECTORY "dist")
-set(CPACK_PACKAGE_FILE_NAME "isle-${PROJECT_VERSION}-${ISLE_PACKAGE_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
-if(MSVC)
+set(CPACK_PACKAGE_FILE_NAME "isle-${PROJECT_VERSION}-${ISLE_PACKAGE_NAME}")
+if(NINTENDO_3DS)
+  find_program(BANNERTOOL bannertool)
+  find_program(MAKEROM makerom)
+
+  ctr_generate_smdh(isle.smdh
+    NAME "LEGO Island"
+    TITLE "LEGO Island"
+    DESCRIPTION "LEGO Island for the Nintendo 3DS"
+    AUTHOR "isledecomp/isle-portable"
+    VERSION "${PROJECT_VERSION}"
+    ICON "${CMAKE_SOURCE_DIR}/packaging/3ds/icon.png"
+  )
+
+  ctr_create_3dsx(isle SMDH isle.smdh)
+  if(BANNERTOOL AND MAKEROM)
+    add_custom_command(
+      OUTPUT "isle.bnr"
+      COMMAND "${BANNERTOOL}" makebanner
+        -i "${CMAKE_SOURCE_DIR}/packaging/3ds/banner.png"
+        -a "${CMAKE_SOURCE_DIR}/packaging/3ds/banner.wav"
+        -o "isle.bnr"
+      DEPENDS "${CMAKE_SOURCE_DIR}/packaging/3ds/banner.png" "${CMAKE_SOURCE_DIR}/packaging/3ds/banner.wav"
+      VERBATIM
+    )
+
+    add_custom_command(
+      OUTPUT "isle.cia"
+      COMMAND "${MAKEROM}"
+        -f cia
+        -exefslogo
+        -o "isle.cia"
+        -rsf "${CMAKE_SOURCE_DIR}/packaging/3ds/template.rsf"
+        -major "${CMAKE_PROJECT_VERSION_MAJOR}"
+        -minor "${CMAKE_PROJECT_VERSION_MINOR}"
+        -micro 0
+        -icon "isle.smdh"
+        -banner "isle.bnr"
+        -elf "isle.elf"
+      DEPENDS "${CMAKE_SOURCE_DIR}/packaging/3ds/template.rsf" "isle.smdh" "isle.bnr"
+      COMMENT "Building CIA executable target isle.cia"
+      VERBATIM
+    )
+
+    add_custom_target("isle_cia" ALL DEPENDS "isle.cia" isle)
+    install(FILES "$<TARGET_FILE_DIR:isle>/isle.cia" DESTINATION "${CMAKE_INSTALL_BINDIR}")
+  endif()
+  install(FILES "$<TARGET_FILE_DIR:isle>/isle.3dsx" DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
+if(NINTENDO_SWITCH)
+  find_program(NACPTOOL NAMES nacptool)
+  find_program(ELF2NRO NAMES elf2nro)
+
+  add_custom_command(
+      OUTPUT "isle.nacp"
+      COMMAND "${NACPTOOL}"
+        --create
+        "LEGO Island"
+        "isledecomp/isle-portable"
+        "${CMAKE_PROJECT_VERSION_MAJOR}.${CMAKE_PROJECT_VERSION_MINOR}.0"
+        "isle.nacp"
+      VERBATIM
+  )
+
+  add_custom_command(
+      OUTPUT "isle.nro"
+      COMMAND "${ELF2NRO}"
+        "$<TARGET_FILE:isle>"
+        "$<TARGET_FILE_DIR:isle>/isle.nro"
+        "--icon=${CMAKE_SOURCE_DIR}/packaging/switch/isle.jpg"
+        "--nacp=${CMAKE_BINARY_DIR}/isle.nacp"
+      DEPENDS "${CMAKE_SOURCE_DIR}/packaging/switch/isle.jpg" "${CMAKE_BINARY_DIR}/isle.nacp"
+      VERBATIM
+  )
+
+  add_custom_target(switch-nro
+    ALL
+    DEPENDS "${CMAKE_BINARY_DIR}/isle.nro"
+    COMMENT "Build switch NRO from ELF"
+  )
+
+endif()
+if(WINDOWS_STORE)
+  install(
+    DIRECTORY
+      "${CMAKE_BINARY_DIR}/AppPackages/isle/"
+    DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    FILES_MATCHING PATTERN "*/Dependencies/x64/Microsoft.VCLibs.x64*.14.00.appx"
+      PATTERN "*/*.msix"
+      PATTERN "*/*.msixbundle")
+endif()
+if(VITA)
+  include("${VITASDK}/share/vita.cmake" REQUIRED)
+
+  add_subdirectory(CONFIG/vita)
+
+  set(ISLE_PACKAGE_NAME "vita-isle")
+  set(VITA_APP_NAME "Lego Island")
+  set(VITA_TITLEID  "LEGO00001")
+  set(VITA_VERSION  "01.00")
+
+  vita_create_self(isle.self isle UNSAFE)
+
+  set(VPK_FILE_ARGS "")
+  file(GLOB_RECURSE SCE_SYS_FILES packaging/vita/sce_sys/*)
+  foreach(FILE ${SCE_SYS_FILES})
+    file(RELATIVE_PATH REL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/vita/ ${FILE})
+    list(APPEND VPK_FILE_ARGS FILE ${FILE} ${REL_FILE})
+  endforeach()
+
+  vita_create_vpk(isle.vpk ${VITA_TITLEID} isle.self
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/CONFIG/vita/isle-config.self" isle-config.self
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/CONFIG/vita/config_plugin.rco" config_plugin.rco
+    VERSION ${VITA_VERSION}
+    NAME ${VITA_APP_NAME}
+    ${VPK_FILE_ARGS}
+  )
+  add_dependencies(isle.vpk-vpk config_plugin.rco_target)
+endif()
+
+if(MSVC OR IOS)
   set(CPACK_GENERATOR ZIP)
+  if(IOS)
+    set(CPACK_ARCHIVE_FILE_EXTENSION ".ipa")
+    set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+  endif()
+elseif(APPLE AND NOT IOS)
+  set(CPACK_GENERATOR DragNDrop)
 else()
   set(CPACK_GENERATOR TGZ)
 endif()
+
 include(CPack)

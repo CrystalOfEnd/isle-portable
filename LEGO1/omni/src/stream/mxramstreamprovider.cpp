@@ -3,7 +3,7 @@
 #include "decomp.h"
 #include "mxdsbuffer.h"
 #include "mxdsfile.h"
-#include "mxomni.h"
+#include "mxmain.h"
 #include "mxstreamcontroller.h"
 #include "mxutilities.h"
 
@@ -108,7 +108,7 @@ MxU32 ReadData(MxU8* p_buffer, MxU32 p_size)
 {
 	MxU32 id;
 	MxU8* data = p_buffer;
-	MxU8* data2;
+	MxU8* data2 = NULL;
 
 	while (data < p_buffer + p_size) {
 		if (data + sizeof(MxU32) <= p_buffer + p_size && UnalignedRead<MxU32>(data) == FOURCC('M', 'x', 'O', 'b')) {

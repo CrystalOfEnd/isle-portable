@@ -9,12 +9,6 @@
 // LIBRARY: LEGO1 0x10086260
 // ??3@YAXPAX@Z
 
-// LIBRARY: LEGO1 0x1008a090
-// _malloc
-
-// LIBRARY: LEGO1 0x1008a100
-// _calloc
-
 // LIBRARY: LEGO1 0x1008a1c0
 // _free
 
@@ -70,6 +64,9 @@
 
 // LIBRARY: LEGO1 0x1008b680
 // _strncmp
+
+// LIBRARY: BETA10 0x100f9a80
+// strncmp
 
 // LIBRARY: LEGO1 0x1008b6c0
 // _atof
@@ -132,12 +129,15 @@
 // ??_L@YGXPAXIHP6EX0@Z1@Z
 
 // LIBRARY: LEGO1 0x1008c2e0
+// LIBRARY: BETA10 0x100f9800
 // ??_M@YGXPAXIHP6EX0@Z@Z
 
 // LIBRARY: LEGO1 0x1008c370
+// LIBRARY: BETA10 0x100f98b0
 // ?__ArrayUnwind@@YGXPAXIHP6EX0@Z@Z
 
 // LIBRARY: LEGO1 0x1008c410
+// LIBRARY: BETA10 0x100fa340
 // _strlwr
 
 // LIBRARY: LEGO1 0x1008c570
@@ -162,6 +162,7 @@
 // __amsg_exit
 
 // LIBRARY: LEGO1 0x1008c980
+// LIBRARY: BETA10 0x10101318
 // __except_handler3
 
 // LIBRARY: LEGO1 0x1008ca60
@@ -721,6 +722,7 @@
 // __fmode
 
 // GLOBAL: LEGO1 0x101028da
+// GLOBAL: BETA10 0x101fbcca
 // __OP_POWjmptab
 
 // GLOBAL: LEGO1 0x1010292a
@@ -780,11 +782,75 @@
 // LIBRARY: BETA10 0x100fa200
 // strcpy
 
+// LIBRARY: BETA10 0x100fa210
+// strcat
+
+// LIBRARY: BETA10 0x100fed20
+// strncat
+
+// LIBRARY: BETA10 0x100faab0
+// strncpy
+
+// LIBRARY: BETA10 0x100ff490
+// setvbuf
+
+// LIBRARY: BETA10 0x100ff180
+// fflush
+
+// LIBRARY: BETA10 0x100fec40
+// __crtMessageBoxA
+
+// LIBRARY: BETA10 0x100fee50
+// _itoa
+
+// LIBRARY: BETA10 0x10106f70
+// _lock_file
+
+// LIBRARY: BETA10 0x100ff1e0
+// _fflush_lk
+
+// LIBRARY: BETA10 0x10107010
+// _unlock_file
+
+// LIBRARY: BETA10 0x10106ea0
+// _lock
+
+// LIBRARY: BETA10 0x10106f50
+// _unlock
+
+// LIBRARY: BETA10 0x100fdaf0
+// _getptd
+
+// LIBRARY: BETA10 0x10104040
+// _malloc_dbg
+
+// GLOBAL: BETA10 0x101fb7b0
+// _locktable
+
+// LIBRARY: BETA10 0x10104c00
+// _free_dbg
+
+// LIBRARY: BETA10 0x100fe900
+// raise
+
+// GLOBAL: BETA10 0x101fa950
+// _iob
+
+// GLOBAL: BETA10 0x102122d0
+// _bufin
+
+
 // LIBRARY: BETA10 0x100f8a88
 // ??2@YAPAXI@Z
 
 // LIBRARY: BETA10 0x100f9420
 // memcpy
+
+// Issue: These symbols are inside `memcpy`. If enabled, the tail of the function mismatches.
+// // GLOBAL: BETA10 0x100f9458
+// TrailingVecs
+// // GLOBAL: BETA10 0x100f94f0
+// TrailingVecs_copydown
 
 // LIBRARY: BETA10 0x100faa00
 // memcmp
@@ -821,6 +887,9 @@
 
 // LIBRARY: BETA10 0x100ff82b
 // __ctrandisp1
+
+// LIBRARY: BETA10 0x100ff6ab
+// __ctrandisp2
 
 // LIBRARY: BETA10 0x100f8a92
 // operator delete
@@ -876,8 +945,118 @@
 // GLOBAL: LEGO1 0x100db6e0
 // GUID_SysKeyboard
 
-// Cannot be handled right now due to anonymous pointer in struct
+// GLOBAL: LEGO1 0x100dd1c0
+// IID_IDirect3DRM2
+
+// LIBRARY: LEGO1 0x1008c960
+// ?_query_new_handler@@YAP6AHI@ZXZ
+
+// LIBRARY: LEGO1 0x1008c970
+// ?_query_new_mode@@YAHXZ
+
+// GLOBAL: LEGO1 0x100fd8ec
+// __newmode
+
+// LIBRARY: BETA10 0x1018f410
+// _pow
+
+// GLOBAL: BETA10 0x101fa910
+// _assertstring
+
+// GLOBAL: BETA10 0x101fa940
+// dblnewline
+
+// GLOBAL: BETA10 0x101fa938
+// dotdotdot
+
+// GLOBAL: BETA10 0x101fa93c
+// newline
+
+// LIBRARY: BETA10 0x100fbe10
+// doexit
+
+// LIBRARY: BETA10 0x100feeb0
+// xtoa
+
+// LIBRARY: BETA10 0x100ff330
+// flsall
+
+// GLOBAL: BETA10 0x101fbb08
+// rterrs
+
+// GLOBAL: BETA10 0x101faf64
+// __proc_attached
+
+// GLOBAL: BETA10 0x10211f6c
+// _pRawDllMain
+
+// GLOBAL: BETA10 0x101fafa0
+// ctrlc_action
+
+// GLOBAL: BETA10 0x101fafa4
+// ctrlbreak_action
+
+// GLOBAL: BETA10 0x101fafa8
+// abort_action
+
+// GLOBAL: BETA10 0x101fafac
+// term_action
+
+// GLOBAL: BETA10 0x101fbc18
+// _First_FPE_Indx
+
+// GLOBAL: BETA10 0x101fbc1c
+// _Num_FPE
+
+// GLOBAL: BETA10 0x101fafe8
+// _crtAssertBusy
+
+// GLOBAL: BETA10 0x101fb01c
+// pfnwsprintfA
+
+// GLOBAL: BETA10 0x10211f50
+// _pfnReportHook
+
+// GLOBAL: BETA10 0x101faff0
+// _CrtDbgMode
+
+// GLOBAL: BETA10 0x101fb000
+// _CrtDbgFile
+
+// LIBRARY: BETA10 0x100fc740
+// _CRT_INIT
+
+// LIBRARY: BETA10 0x100feb90
+// siglookup
+
+// LIBRARY: BETA10 0x10109920
+// $$$00001(2)
+
+// LIBRARY: BETA10 0x10100a70
+// _CrtDbgBreak
+
+// LIBRARY: BETA10 0x100fc650
+// _vsnprintf
+
+// LIBRARY: BETA10 0x1010cc20
+// _snprintf
+
+// LIBRARY: BETA10 0x10100fe0
+// CrtMessageWindow
+
+// Cannot be handled right now due to anonymous pointer in struct.
+// We can annotate it on the original side, but we have no symbol on the recomp side.
+// We would need a way of annotating "the pointer at c_dfDIKeyboard+0x14 has orig address 0x10097f80".
 // // GLOBAL: LEGO1 0x10098f80
 // c_dfDIKeyboard
+
+
+/// Globals from libraries without symbols
+
+// STRING: LEGO1 0x100dabb0
+static const char* ___crtLCMapStringA_str = "\0";
+
+// STRING: LEGO1 0x100dabb4
+static const wchar_t *___crtLCMapStringA_wstr = L"\0";
 
 #endif

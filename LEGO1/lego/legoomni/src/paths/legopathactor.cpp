@@ -37,7 +37,7 @@ const char* g_strHIT_WALL_SOUND = "HIT_WALL_SOUND";
 
 // GLOBAL: LEGO1 0x100f3308
 // GLOBAL: BETA10 0x101f1e1c
-MxLong g_unk0x100f3308 = 0;
+MxLong g_timeLastHitSoundPlayed = 0;
 
 // FUNCTION: LEGO1 0x1002d700
 // FUNCTION: BETA10 0x100ae6e0
@@ -163,7 +163,7 @@ MxResult LegoPathActor::VTable0x88(
 	}
 	else {
 		m_boundary->AddActor(this);
-		FUN_10010c30();
+		TransformPointOfView();
 	}
 
 	m_unk0xec = m_roi->GetLocal2World();
@@ -223,7 +223,7 @@ MxResult LegoPathActor::VTable0x84(
 
 	if (m_cameraFlag && m_userNavFlag) {
 		m_boundary->AddActor(this);
-		FUN_10010c30();
+		TransformPointOfView();
 	}
 	else {
 		p5.EqualsCross(*p_boundary->GetUp(), p3);
@@ -292,8 +292,8 @@ MxS32 LegoPathActor::VTable0x8c(float p_time, Matrix4& p_transform)
 				if (m_boundary == oldBoundary) {
 					MxLong time = Timer()->GetTime();
 
-					if (time - g_unk0x100f3308 > 1000) {
-						g_unk0x100f3308 = time;
+					if (time - g_timeLastHitSoundPlayed > 1000) {
+						g_timeLastHitSoundPlayed = time;
 						const char* var = VariableTable()->GetVariable(g_strHIT_WALL_SOUND);
 
 						if (var && var[0] != 0) {
@@ -393,14 +393,14 @@ void LegoPathActor::VTable0x74(Matrix4& p_transform)
 {
 	if (m_userNavFlag) {
 		m_roi->WrappedSetLocal2WorldWithWorldDataUpdate(p_transform);
-		FUN_10010c30();
+		TransformPointOfView();
 	}
 	else {
 		m_roi->WrappedSetLocal2WorldWithWorldDataUpdate(p_transform);
 		m_roi->WrappedUpdateWorldData();
 
 		if (m_cameraFlag) {
-			FUN_10010c30();
+			TransformPointOfView();
 		}
 	}
 }
@@ -440,7 +440,7 @@ void LegoPathActor::Animate(float p_time)
 			LegoWorld* world = CurrentWorld();
 
 			if (world) {
-				world->GetCameraController()->FUN_10012290(DTOR(m_unk0x14c));
+				world->GetCameraController()->RotateZ(DTOR(m_unk0x14c));
 			}
 		}
 	}
@@ -488,7 +488,7 @@ MxU32 LegoPathActor::VTable0x6c(
 				LegoROI* roi = actor->GetROI();
 
 				if (roi != NULL && (roi->GetVisibility() || actor->GetCameraFlag())) {
-					if (roi->FUN_100a9410(p_v1, p_v2, p_f1, p_f2, p_v3, m_collideBox && actor->m_collideBox)) {
+					if (roi->Intersect(p_v1, p_v2, p_f1, p_f2, p_v3, m_collideBox && actor->m_collideBox)) {
 						HitActor(actor, TRUE);
 						actor->HitActor(this, FALSE);
 						return 2;
@@ -641,6 +641,7 @@ MxResult LegoPathActor::VTable0x9c()
 			case 1:
 				break;
 			default:
+				assert(0);
 				return FAILURE;
 			}
 		}
@@ -657,10 +658,14 @@ MxResult LegoPathActor::VTable0x9c()
 	if (local20 != 0) {
 		Mx3DPointFloat local78;
 
-		Vector3& v1 = *m_destEdge->CWVertex(*m_boundary);
-		Vector3& v2 = *m_destEdge->CCWVertex(*m_boundary);
+		assert(m_boundary && m_destEdge);
 
-		LERP3(local34, v1, v2, m_unk0xe4);
+		Vector3* v1 = m_destEdge->CWVertex(*m_boundary);
+		Vector3* v2 = m_destEdge->CCWVertex(*m_boundary);
+
+		assert(v1 && v2);
+
+		LERP3(local34, *v1, *v2, m_unk0xe4);
 
 		m_destEdge->GetFaceNormal(*m_boundary, local78);
 		local48.EqualsCross(*m_boundary->GetUp(), local78);
@@ -696,6 +701,7 @@ MxResult LegoPathActor::VTable0x9c()
 	}
 
 	if (VTable0x80(localc0, local84, local34, local48) != SUCCESS) {
+		MxTrace("Warning: m_BADuration = %g, roi = %s\n", m_BADuration, m_roi->GetName());
 		return FAILURE;
 	}
 
@@ -746,7 +752,7 @@ void LegoPathActor::VTable0xa8()
 
 	if (m_userNavFlag) {
 		m_roi->WrappedSetLocal2WorldWithWorldDataUpdate(m_unk0xec);
-		FUN_10010c30();
+		TransformPointOfView();
 	}
 }
 

@@ -2,16 +2,18 @@
 
 #include "mxautolock.h"
 #include "mxdsaction.h"
+#include "mxmain.h"
 #include "mxmisc.h"
-#include "mxomni.h"
 #include "mxpresenter.h"
 #include "mxticklemanager.h"
 #include "mxticklethread.h"
 #include "mxwavepresenter.h"
 
+#include <SDL3/SDL_log.h>
+
 DECOMP_SIZE_ASSERT(MxSoundManager, 0x3c);
 
-// GLOBAL LEGO1 0x10101420
+// GLOBAL: LEGO1 0x10101420
 MxS32 g_volumeAttenuation[100] = {-6643, -5643, -5058, -4643, -4321, -4058, -3836, -3643, -3473, -3321, -3184, -3058,
 								  -2943, -2836, -2736, -2643, -2556, -2473, -2395, -2321, -2251, -2184, -2120, -2058,
 								  -2000, -1943, -1888, -1836, -1785, -1736, -1689, -1643, -1599, -1556, -1514, -1473,
@@ -23,18 +25,21 @@ MxS32 g_volumeAttenuation[100] = {-6643, -5643, -5058, -4643, -4321, -4058, -383
 								  -43,   -29,   -14,   0};
 
 // FUNCTION: LEGO1 0x100ae740
+// FUNCTION: BETA10 0x10132c70
 MxSoundManager::MxSoundManager()
 {
 	Init();
 }
 
 // FUNCTION: LEGO1 0x100ae7d0
+// FUNCTION: BETA10 0x10132ce7
 MxSoundManager::~MxSoundManager()
 {
 	Destroy(TRUE);
 }
 
 // FUNCTION: LEGO1 0x100ae830
+// FUNCTION: BETA10 0x10132d59
 void MxSoundManager::Init()
 {
 	SDL_zero(m_engine);
@@ -42,6 +47,7 @@ void MxSoundManager::Init()
 }
 
 // FUNCTION: LEGO1 0x100ae840
+// FUNCTION: BETA10 0x10132d89
 void MxSoundManager::Destroy(MxBool p_fromDestructor)
 {
 	if (m_thread) {
@@ -52,7 +58,7 @@ void MxSoundManager::Destroy(MxBool p_fromDestructor)
 		TickleManager()->UnregisterClient(this);
 	}
 
-	m_criticalSection.Enter();
+	ENTER(m_criticalSection);
 
 	if (m_stream) {
 		SDL_DestroyAudioStream(m_stream);
@@ -80,7 +86,7 @@ MxResult MxSoundManager::Create(MxU32 p_frequencyMS, MxBool p_createThread)
 		goto done;
 	}
 
-	m_criticalSection.Enter();
+	ENTER(m_criticalSection);
 	locked = TRUE;
 
 	engineConfig = ma_engine_config_init();
@@ -98,12 +104,17 @@ MxResult MxSoundManager::Create(MxU32 p_frequencyMS, MxBool p_createThread)
 	spec.format = SDL_AUDIO_F32;
 	spec.channels = ma_engine_get_channels(m_engine);
 
-	if ((m_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, &AudioStreamCallback, this)) ==
+	if ((m_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, &AudioStreamCallback, this)) !=
 		NULL) {
-		goto done;
+		SDL_ResumeAudioDevice(SDL_GetAudioStreamDevice(m_stream));
 	}
-
-	SDL_ResumeAudioDevice(SDL_GetAudioStreamDevice(m_stream));
+	else {
+		SDL_LogError(
+			SDL_LOG_CATEGORY_APPLICATION,
+			"Failed to open default audio device for playback: %s",
+			SDL_GetError()
+		);
+	}
 
 	if (p_createThread) {
 		m_thread = new MxTickleThread(this, p_frequencyMS);
@@ -137,7 +148,9 @@ void MxSoundManager::AudioStreamCallback(
 )
 {
 	static vector<MxU8> g_buffer;
-	g_buffer.reserve(p_additionalAmount);
+	if (p_additionalAmount > g_buffer.size()) {
+		g_buffer.resize(p_additionalAmount);
+	}
 
 	MxSoundManager* manager = (MxSoundManager*) p_userdata;
 	ma_uint32 bytesPerFrame = ma_get_bytes_per_frame(ma_format_f32, ma_engine_get_channels(manager->m_engine));
@@ -150,17 +163,19 @@ void MxSoundManager::AudioStreamCallback(
 }
 
 // FUNCTION: LEGO1 0x100aeab0
+// FUNCTION: BETA10 0x101331e3
 void MxSoundManager::Destroy()
 {
 	Destroy(FALSE);
 }
 
 // FUNCTION: LEGO1 0x100aeac0
+// FUNCTION: BETA10 0x10133203
 void MxSoundManager::SetVolume(MxS32 p_volume)
 {
 	MxAudioManager::SetVolume(p_volume);
 
-	m_criticalSection.Enter();
+	ENTER(m_criticalSection);
 
 	MxPresenter* presenter;
 	MxPresenterListCursor cursor(m_presenters);
@@ -173,7 +188,8 @@ void MxSoundManager::SetVolume(MxS32 p_volume)
 }
 
 // FUNCTION: LEGO1 0x100aebd0
-MxPresenter* MxSoundManager::FUN_100aebd0(const MxAtomId& p_atomId, MxU32 p_objectId)
+// FUNCTION: BETA10 0x101332cf
+MxPresenter* MxSoundManager::FindPresenter(const MxAtomId& p_atomId, MxU32 p_objectId)
 {
 	AUTOLOCK(m_criticalSection);
 
@@ -181,8 +197,7 @@ MxPresenter* MxSoundManager::FUN_100aebd0(const MxAtomId& p_atomId, MxU32 p_obje
 	MxPresenterListCursor cursor(m_presenters);
 
 	while (cursor.Next(presenter)) {
-		if (presenter->GetAction()->GetAtomId().GetInternal() == p_atomId.GetInternal() &&
-			presenter->GetAction()->GetObjectId() == p_objectId) {
+		if (presenter->GetAction()->GetAtomId() == p_atomId && presenter->GetAction()->GetObjectId() == p_objectId) {
 			return presenter;
 		}
 	}

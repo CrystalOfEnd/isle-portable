@@ -7,17 +7,6 @@
 #include "d3drmmesh_impl.h"
 #include "d3drmobject_impl.h"
 #include "d3drmrenderer.h"
-#ifdef USE_OPENGL1
-#include "d3drmrenderer_opengl1.h"
-#endif
-#ifdef USE_OPENGLES2
-#include "d3drmrenderer_opengles2.h"
-#endif
-#ifdef _WIN32
-#include "d3drmrenderer_directx9.h"
-#endif
-#include "d3drmrenderer_sdl3gpu.h"
-#include "d3drmrenderer_software.h"
 #include "d3drmtexture_impl.h"
 #include "d3drmviewport_impl.h"
 #include "ddraw_impl.h"
@@ -127,7 +116,7 @@ HRESULT Direct3DRMImpl::CreateDeviceFromD3D(
 {
 	auto renderer = static_cast<Direct3DRMRenderer*>(d3dDevice);
 	*outDevice = static_cast<IDirect3DRMDevice2*>(
-		new Direct3DRMDevice2Impl(renderer->GetWidth(), renderer->GetHeight(), renderer)
+		new Direct3DRMDevice2Impl(renderer->GetVirtualWidth(), renderer->GetVirtualHeight(), renderer)
 	);
 	return DD_OK;
 }
@@ -143,34 +132,17 @@ HRESULT Direct3DRMImpl::CreateDeviceFromSurface(
 	DDSDesc.dwSize = sizeof(DDSURFACEDESC);
 	surface->GetSurfaceDesc(&DDSDesc);
 
-	Direct3DRMRenderer* renderer;
-	if (SDL_memcmp(&guid, &SDL3_GPU_GUID, sizeof(GUID)) == 0) {
-		renderer = Direct3DRMSDL3GPURenderer::Create(DDSDesc.dwWidth, DDSDesc.dwHeight);
-	}
-	else if (SDL_memcmp(&guid, &SOFTWARE_GUID, sizeof(GUID)) == 0) {
-		renderer = new Direct3DRMSoftwareRenderer(DDSDesc.dwWidth, DDSDesc.dwHeight);
-	}
-#ifdef USE_OPENGLES2
-	else if (SDL_memcmp(&guid, &OpenGLES2_GUID, sizeof(GUID)) == 0) {
-		renderer = OpenGLES2Renderer::Create(DDSDesc.dwWidth, DDSDesc.dwHeight);
-	}
-#endif
-#ifdef USE_OPENGL1
-	else if (SDL_memcmp(&guid, &OpenGL1_GUID, sizeof(GUID)) == 0) {
-		renderer = OpenGL1Renderer::Create(DDSDesc.dwWidth, DDSDesc.dwHeight);
-	}
-#endif
-#ifdef _WIN32
-	else if (SDL_memcmp(&guid, &DirectX9_GUID, sizeof(GUID)) == 0) {
-		renderer = DirectX9Renderer::Create(DDSDesc.dwWidth, DDSDesc.dwHeight);
-	}
-#endif
-	else {
+	IDirect3DMiniwin* miniwind3d = nullptr;
+	dd->QueryInterface(IID_IDirect3DMiniwin, (void**) &miniwind3d);
+	SDL_assert(miniwind3d);
+
+	DDRenderer = CreateDirect3DRMRenderer(miniwind3d, DDSDesc, guid);
+	if (!DDRenderer) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Device GUID not recognized");
 		return E_NOINTERFACE;
 	}
 	*outDevice =
-		static_cast<IDirect3DRMDevice2*>(new Direct3DRMDevice2Impl(DDSDesc.dwWidth, DDSDesc.dwHeight, renderer));
+		static_cast<IDirect3DRMDevice2*>(new Direct3DRMDevice2Impl(DDSDesc.dwWidth, DDSDesc.dwHeight, DDRenderer));
 	return DD_OK;
 }
 
@@ -181,9 +153,8 @@ HRESULT Direct3DRMImpl::CreateTexture(D3DRMIMAGE* image, IDirect3DRMTexture2** o
 }
 
 HRESULT Direct3DRMImpl::CreateTextureFromSurface(LPDIRECTDRAWSURFACE surface, IDirect3DRMTexture2** outTexture)
-
 {
-	*outTexture = static_cast<IDirect3DRMTexture2*>(new Direct3DRMTextureImpl(surface));
+	*outTexture = static_cast<IDirect3DRMTexture2*>(new Direct3DRMTextureImpl(surface, true));
 	return DD_OK;
 }
 

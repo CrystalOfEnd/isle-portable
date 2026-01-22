@@ -1,5 +1,6 @@
 #include "legotextureinfo.h"
 
+#include "extensions/textureloader.h"
 #include "legovideomanager.h"
 #include "misc.h"
 #include "misc/legoimage.h"
@@ -8,6 +9,8 @@
 #include "tgl/d3drm/impl.h"
 
 DECOMP_SIZE_ASSERT(LegoTextureInfo, 0x10)
+
+using namespace Extensions;
 
 // FUNCTION: LEGO1 0x10065bf0
 LegoTextureInfo::LegoTextureInfo()
@@ -56,6 +59,10 @@ LegoTextureInfo* LegoTextureInfo::Create(const char* p_name, LegoTexture* p_text
 		strcpy(textureInfo->m_name, p_name);
 	}
 
+	if (Extension<TextureLoader>::Call(PatchTexture, textureInfo).value_or(false)) {
+		return textureInfo;
+	}
+
 	LPDIRECTDRAW pDirectDraw = VideoManager()->GetDirect3D()->DirectDraw();
 	LegoImage* image = p_texture->GetImage();
 
@@ -83,7 +90,7 @@ LegoTextureInfo* LegoTextureInfo::Create(const char* p_name, LegoTexture* p_text
 	memset(&desc, 0, sizeof(desc));
 	desc.dwSize = sizeof(desc);
 
-	if (textureInfo->m_surface->Lock(NULL, &desc, DDLOCK_SURFACEMEMORYPTR, NULL) != DD_OK) {
+	if (textureInfo->m_surface->Lock(NULL, &desc, DDLOCK_SURFACEMEMORYPTR | DDLOCK_WRITEONLY, NULL) != DD_OK) {
 		goto done;
 	}
 
@@ -193,7 +200,7 @@ LegoResult LegoTextureInfo::LoadBits(const LegoU8* p_bits)
 		memset(&desc, 0, sizeof(desc));
 		desc.dwSize = sizeof(desc);
 
-		if (m_surface->Lock(NULL, &desc, DDLOCK_SURFACEMEMORYPTR, NULL) == DD_OK) {
+		if (m_surface->Lock(NULL, &desc, DDLOCK_SURFACEMEMORYPTR | DDLOCK_WRITEONLY, NULL) == DD_OK) {
 			MxU8* surface = (MxU8*) desc.lpSurface;
 			const LegoU8* bits = p_bits;
 

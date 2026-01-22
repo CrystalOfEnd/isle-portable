@@ -5,7 +5,7 @@ struct FS_Output {
 	float Depth : SV_Depth;
 };
 
-cbuffer FragmentShadingData : register(b0, space3)
+cbuffer FragmentShadingData : REGISTER_SPACE(b0, space3)
 {
 	SceneLight lights[3];
 	int lightCount;
@@ -24,8 +24,8 @@ float4 unpackColor(uint packed)
 	return color;
 }
 
-Texture2D<float4> Texture : register(t0, space2);
-SamplerState Sampler : register(s0, space2);
+Texture2D<float4> Texture : REGISTER_SPACE(t0, space2);
+SamplerState Sampler : REGISTER_SPACE(s0, space2);
 
 FS_Output main(FS_Input input)
 {
@@ -72,8 +72,11 @@ FS_Output main(FS_Input input)
 	if (UseTexture != 0) {
 		float4 texel = Texture.Sample(Sampler, input.TexCoord);
 		finalColor = saturate(texel.rgb * finalColor);
+		output.Color = float4(finalColor, texel.a);
 	}
-	output.Color = float4(finalColor, Color.a);
+	else {
+		output.Color = float4(finalColor, Color.a);
+	}
 	output.Depth = input.Position.w;
 	return output;
 }

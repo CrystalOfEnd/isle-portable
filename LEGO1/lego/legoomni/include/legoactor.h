@@ -40,8 +40,8 @@ public:
 		return !strcmp(p_name, LegoActor::ClassName()) || LegoEntity::IsA(p_name);
 	}
 
-	void ParseAction(char* p_extra) override;                             // vtable+0x20
-	void SetROI(LegoROI* p_roi, MxBool p_bool1, MxBool p_bool2) override; // vtable+0x24
+	void ParseAction(char* p_extra) override;                                       // vtable+0x20
+	void SetROI(LegoROI* p_roi, MxBool p_bool1, MxBool p_updateTransform) override; // vtable+0x24
 
 	// FUNCTION: LEGO1 0x10002cc0
 	// FUNCTION: BETA10 0x1000f3e0
@@ -56,11 +56,11 @@ public:
 
 	// FUNCTION: LEGO1 0x10002ce0
 	// FUNCTION: BETA10 0x1000f440
-	virtual void VTable0x58(MxFloat p_unk0x70) { m_unk0x70 = p_unk0x70; } // vtable+0x58
+	virtual void SetLastPathStruct(MxFloat p_lastPathStruct) { m_lastPathStruct = p_lastPathStruct; } // vtable+0x58
 
 	// FUNCTION: LEGO1 0x10002cf0
 	// FUNCTION: BETA10 0x1000f470
-	virtual MxFloat VTable0x5c() { return m_unk0x70; } // vtable+0x5c
+	virtual MxFloat GetLastPathStruct() { return m_lastPathStruct; } // vtable+0x5c
 
 	// FUNCTION: LEGO1 0x10002d00
 	// FUNCTION: BETA10 0x1000f4a0
@@ -77,7 +77,7 @@ public:
 protected:
 	MxFloat m_frequencyFactor; // 0x68
 	LegoCacheSound* m_sound;   // 0x6c
-	MxFloat m_unk0x70;         // 0x70
+	MxFloat m_lastPathStruct;  // 0x70
 	MxU8 m_actorId;            // 0x74
 };
 

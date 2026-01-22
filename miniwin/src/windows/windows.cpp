@@ -2,16 +2,19 @@
 #include "miniwin/ddraw.h"
 
 #include <SDL3/SDL.h>
+#include <cassert>
 #include <vector>
 
 ULONG IUnknown::AddRef()
 {
+	assert(m_refCount > 0);
 	m_refCount += 1;
 	return m_refCount;
 }
 
 ULONG IUnknown::Release()
 {
+	assert(m_refCount > 0);
 	m_refCount -= 1;
 	if (m_refCount == 0) {
 		delete this;
@@ -81,72 +84,6 @@ BOOL RedrawWindow(void* hWnd, const void* lprcUpdate, void* hrgnUpdate, unsigned
 {
 	MINIWIN_NOT_IMPLEMENTED();
 	return 1;
-}
-
-int SetBkColor(void*, int)
-{
-	MINIWIN_NOT_IMPLEMENTED();
-	return 0;
-}
-
-int SetBkMode(void*, int)
-{
-	MINIWIN_NOT_IMPLEMENTED();
-	return 0;
-}
-
-int SetTextColor(HDC hdc, int color)
-{
-	MINIWIN_NOT_IMPLEMENTED();
-	return color;
-}
-
-BOOL GetTextExtentPoint(HDC hdc, LPCSTR lpString, int c, SIZE* psizl)
-{
-	MINIWIN_NOT_IMPLEMENTED();
-	if (psizl) {
-		psizl->cx = 8 * c;
-		psizl->cy = 16;
-	}
-	return TRUE;
-}
-
-int ExtTextOut(HDC, int, int, unsigned int, const RECT*, LPCSTR, unsigned int, void*)
-{
-	MINIWIN_NOT_IMPLEMENTED();
-	return 1;
-}
-
-HFONT CreateFont(
-	int,
-	int,
-	int,
-	int,
-	int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	LPCSTR
-)
-{
-	MINIWIN_NOT_IMPLEMENTED();
-	return nullptr;
-}
-
-void* SelectObject(HDC, HFONT)
-{
-	MINIWIN_NOT_IMPLEMENTED();
-	return nullptr;
-}
-
-int GetTextExtentPoint32(HDC hdc, LPCSTR str, int len, SIZE* out)
-{
-	return GetTextExtentPoint(hdc, str, len, out);
 }
 
 HMENU GetMenu(HWND hWnd)

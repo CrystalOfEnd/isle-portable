@@ -9,6 +9,7 @@ class LegoTextureInfo;
 class LegoStorage;
 
 // VTABLE: LEGO1 0x100dbf10
+// VTABLE: BETA10 0x101c3978
 // SIZE 0x20
 class LegoLOD : public ViewLOD {
 public:
@@ -22,22 +23,25 @@ public:
 	~LegoLOD() override;
 
 	// FUNCTION: LEGO1 0x100aae70
+	// FUNCTION: BETA10 0x1018e650
 	int NumPolys() const override { return m_numPolys; } // vtable+0x0c
 
 	// FUNCTION: LEGO1 0x100aae80
+	// FUNCTION: BETA10 0x1018e670
 	float VTable0x10() override { return 0.0; } // vtable+0x10
 
 	LegoResult Read(Tgl::Renderer* p_renderer, LegoTextureContainer* p_textureContainer, LegoStorage* p_storage);
 	LegoLOD* Clone(Tgl::Renderer* p_renderer);
 	LegoResult SetColor(LegoFloat p_red, LegoFloat p_green, LegoFloat p_blue, LegoFloat p_alpha);
 	LegoResult SetTextureInfo(LegoTextureInfo* p_textureInfo);
-	LegoResult FUN_100aad70(LegoTextureInfo* p_textureInfo);
+	LegoResult UpdateTextureInfo(LegoTextureInfo* p_textureInfo);
 	void ClearMeshOffset();
 	LegoResult GetTextureInfo(LegoTextureInfo*& p_textureInfo);
 
 	static LegoBool HasInhPrefix(const LegoChar* p_name);
 
 	// SYNTHETIC: LEGO1 0x100aa430
+	// SYNTHETIC: BETA10 0x1018e530
 	// LegoLOD::`scalar deleting destructor'
 
 protected:

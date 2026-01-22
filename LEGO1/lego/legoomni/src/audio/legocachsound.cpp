@@ -2,7 +2,7 @@
 
 #include "legosoundmanager.h"
 #include "misc.h"
-#include "mxomni.h"
+#include "mxmain.h"
 
 #include <assert.h>
 
@@ -270,6 +270,29 @@ void LegoCacheSound::MuteStop(MxBool p_muted)
 			ma_sound_start(m_cacheSound);
 		}
 	}
+}
+
+// FUNCTION: BETA10 0x10066fa9
+LegoCacheSound::LegoCacheSound(LegoCacheSound& p_sound)
+{
+	CopyFrom(p_sound);
+}
+
+// FUNCTION: BETA10 0x10067062
+LegoCacheSound& LegoCacheSound::operator=(LegoCacheSound& p_sound)
+{
+	if (this == &p_sound) {
+		return *this;
+	}
+
+	CopyFrom(p_sound);
+	return *this;
+}
+
+// FUNCTION: BETA10 0x1006709d
+void LegoCacheSound::CopyFrom(LegoCacheSound& p_sound)
+{
+	assert(0);
 }
 
 // FUNCTION: LEGO1 0x10006d80

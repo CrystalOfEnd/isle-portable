@@ -3,8 +3,8 @@
 #include "mxdiskstreamcontroller.h"
 #include "mxdschunk.h"
 #include "mxdsstreamingaction.h"
+#include "mxmain.h"
 #include "mxmisc.h"
-#include "mxomni.h"
 #include "mxstreamchunk.h"
 #include "mxstreamcontroller.h"
 #include "mxstreamer.h"
@@ -28,6 +28,7 @@ MxDSBuffer::MxDSBuffer()
 	m_bytesRemaining = 0;
 	m_mode = e_preallocated;
 	m_unk0x30 = 0;
+	m_sourceBuffer = NULL;
 }
 
 // FUNCTION: LEGO1 0x100c6530
@@ -35,6 +36,10 @@ MxDSBuffer::MxDSBuffer()
 MxDSBuffer::~MxDSBuffer()
 {
 	assert(m_referenceCount == 0);
+
+	if (m_sourceBuffer) {
+		m_sourceBuffer->ReleaseRef(NULL);
+	}
 
 	if (m_pBuffer != NULL) {
 		switch (m_mode) {
@@ -210,7 +215,7 @@ MxResult MxDSBuffer::StartPresenterFromAction(
 		p_objectheader->SetUnknown28(p_action1->GetUnknown28());
 		p_objectheader->SetNotificationObject(p_action1->GetNotificationObject());
 		p_objectheader->SetOrigin(p_action1->GetOrigin());
-		p_objectheader->SetUnknown90(p_action1->GetUnknown90());
+		p_objectheader->SetTimeStarted(p_action1->GetTimeStarted());
 		p_objectheader->MergeFrom(*p_action1);
 
 		m_unk0x30->SetInternalAction(p_objectheader->Clone());
@@ -265,6 +270,28 @@ MxResult MxDSBuffer::ParseChunk(
 			delete buffer;
 			delete p_header;
 			return FAILURE;
+		}
+
+		// START FIX: Ref-Counting Backpressure for Split Chunks
+		//
+		// PROBLEM: When a `DS_CHUNK_SPLIT` is found, the temporary `MxStreamChunk`
+		// header that holds a reference to the source buffer is immediately
+		// destroyed. This prematurely releases the reference, causing the source
+		// buffer's ref-count to drop to zero.
+		//
+		// EFFECT: The source buffer is freed immediately instead of being kept
+		// alive on the m_list0x74 "keep-alive" list. This breaks the natural
+		// ref-counting backpressure mechanism, as the controller is blind to the
+		// downstream workload and keeps reading new data from the stream at full
+		// speed, eventually leading to a memory leak.
+		//
+		// SOLUTION: We explicitly link the new reassembly buffer to the original
+		// source buffer. We then add an artificial reference to the source buffer.
+		// This reference is designed to be released by the reassembly buffer's
+		// destructor, ensuring the source buffer is kept alive for the correct
+		// duration and that the backpressure system functions as intended.
+		if (p_header->GetBuffer()) {
+			buffer->SetSourceBuffer(p_header->GetBuffer());
 		}
 
 		MxU16* flags = MxStreamChunk::IntoFlags(buffer->GetBuffer());
@@ -409,9 +436,7 @@ MxU8 MxDSBuffer::ReleaseRef(MxDSChunk*)
 // FUNCTION: LEGO1 0x100c6ee0
 void MxDSBuffer::AddRef(MxDSChunk* p_chunk)
 {
-	if (p_chunk) {
-		m_referenceCount++;
-	}
+	m_referenceCount++;
 }
 
 // FUNCTION: LEGO1 0x100c6ef0
@@ -460,31 +485,34 @@ void MxDSBuffer::FUN_100c6f80(MxU32 p_writeOffset)
 }
 
 // FUNCTION: LEGO1 0x100c6fa0
+// FUNCTION: BETA10 0x101582f2
 MxU8* MxDSBuffer::FUN_100c6fa0(MxU8* p_data)
 {
-	MxU8* current = p_data ? p_data : m_pBuffer;
-	MxU8* end = m_writeOffset + m_pBuffer - 8;
+	MxU8* volatile current = p_data ? p_data : m_pBuffer;
 
-	while (current <= end) {
+	while (current <= m_writeOffset + m_pBuffer - 8) {
 		switch (UnalignedRead<MxU32>(current)) {
-		case FOURCC('L', 'I', 'S', 'T'):
-		case FOURCC('R', 'I', 'F', 'F'):
-			current += 12;
+		case FOURCC('M', 'x', 'O', 'b'):
+		case FOURCC('M', 'x', 'C', 'h'):
+			if (current == p_data) {
+				MxU32 size = UnalignedRead<MxU32>(current + 4);
+				current += (size & 1) + size;
+				current += 8;
+			}
+			else {
+				return current;
+			}
 			break;
 		case FOURCC('M', 'x', 'D', 'a'):
 		case FOURCC('M', 'x', 'S', 't'):
 			current += 8;
 			break;
-		case FOURCC('M', 'x', 'O', 'b'):
-		case FOURCC('M', 'x', 'C', 'h'):
-			if (current != p_data) {
-				return current;
-			}
-			current += ((uintptr_t) current) & 1;
-			current += 8;
-			break;
 		case FOURCC('M', 'x', 'H', 'd'):
-			current += (((MxU32*) current)[1] + 8);
+			current += UnalignedRead<MxU32>(current + 4) + 8;
+			break;
+		case FOURCC('L', 'I', 'S', 'T'):
+		case FOURCC('R', 'I', 'F', 'F'):
+			current += 12;
 			break;
 		default:
 			return NULL;

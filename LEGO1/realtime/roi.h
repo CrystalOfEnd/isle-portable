@@ -15,9 +15,18 @@
 // SIZE 0x28
 class BoundingBox {
 public:
+	// The BETA10 matches may reference the wrong version
+
+	// FUNCTION: BETA10 0x1004a7a0
 	const Vector3& Min() const { return min; }
+
+	// FUNCTION: BETA10 0x10174c30
 	Vector3& Min() { return min; }
+
+	// FUNCTION: BETA10 0x1004a7c0
 	const Vector3& Max() const { return max; }
+
+	// FUNCTION: BETA10 0x10174c50
 	Vector3& Max() { return max; }
 
 private:
@@ -31,13 +40,25 @@ private:
 // SIZE 0x18
 class BoundingSphere {
 public:
+	// The BETA10 matches may reference the wrong version
+
+	// FUNCTION: BETA10 0x1001fac0
 	const Vector3& Center() const { return center; }
+
+	// FUNCTION: BETA10 0x100d55a0
 	Vector3& Center() { return center; }
+
+	// FUNCTION: BETA10 0x1001fd30
 	const float& Radius() const { return radius; }
+
+	// FUNCTION: BETA10 0x1001fae0
 	float& Radius() { return radius; }
 
 	// SYNTHETIC: BETA10 0x1001fb90
 	// BoundingSphere::operator=
+
+	// SYNTHETIC: BETA10 0x1001fc50
+	// ??0BoundingSphere@@QAE@XZ
 
 private:
 	Mx3DPointFloat center; // 0x00
@@ -49,12 +70,14 @@ private:
  * a geometric object.
  */
 // VTABLE: LEGO1 0x100dbd90
+// VTABLE: BETA10 0x101c34c0
 // SIZE 0x04
 class LODObject {
 public:
 	// LODObject();
 
 	// FUNCTION: LEGO1 0x100a6f00
+	// FUNCTION: BETA10 0x10174c70
 	virtual ~LODObject() {}
 
 	virtual double AveragePolyArea() const = 0; // vtable+0x04
@@ -63,8 +86,12 @@ public:
 	virtual float VTable0x10() = 0;             // vtable+0x10
 
 	// SYNTHETIC: LEGO1 0x100a6f10
+	// SYNTHETIC: BETA10 0x10174c90
 	// LODObject::`scalar deleting destructor'
 };
+
+// SYNTHETIC: BETA10 0x1018e620
+// LODObject::LODObject
 
 /*
  * A CompoundObject is simply a set of ROI objects which
@@ -136,6 +163,7 @@ protected:
 // list<ROI *,allocator<ROI *> >::~list<ROI *,allocator<ROI *> >
 
 // SYNTHETIC: LEGO1 0x100a5d50
+// SYNTHETIC: BETA10 0x101686a0
 // ROI::~ROI
 
 #endif // ROI_H

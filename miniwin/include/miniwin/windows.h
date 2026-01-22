@@ -46,7 +46,6 @@
 #define CLIP_DEFAULT_PRECIS 0
 #define DEFAULT_QUALITY 0
 #define ETO_OPAQUE 0x0002
-#define FF_DONTCARE 0x00000000
 #define RASTERCAPS 0x00000000
 #define RC_PALETTE 0x0100
 #define SIZEPALETTE 104
@@ -169,37 +168,6 @@ int WINAPI ReleaseDC(HWND hWnd, HDC hDC);
 int WINAPI GetDeviceCaps(HDC hdc, int index);
 
 BOOL RedrawWindow(void* hWnd, const void* lprcUpdate, void* hrgnUpdate, unsigned int flags);
-
-int SetBkColor(void*, int);
-
-int SetBkMode(void*, int);
-
-int SetTextColor(HDC hdc, int color);
-
-BOOL GetTextExtentPoint(HDC hdc, LPCSTR lpString, int c, SIZE* psizl);
-
-int ExtTextOut(HDC, int, int, unsigned int, const RECT*, LPCSTR, unsigned int, void*);
-
-HFONT CreateFont(
-	int,
-	int,
-	int,
-	int,
-	int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	unsigned int,
-	LPCSTR
-);
-
-void* SelectObject(HDC, HFONT);
-
-int GetTextExtentPoint32(HDC hdc, LPCSTR str, int len, SIZE* out);
 
 HMENU GetMenu(HWND hWnd);
 

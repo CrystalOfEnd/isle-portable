@@ -19,41 +19,124 @@ add_library(miniwin STATIC EXCLUDE_FROM_ALL
   src/d3drm/d3drmmesh.cpp
   src/d3drm/d3drmtexture.cpp
   src/d3drm/d3drmviewport.cpp
+  src/d3drm/d3drmrenderer.cpp
   src/internal/meshutils.cpp
-
-  # D3DRM backends
-  src/d3drm/backends/sdl3gpu/renderer.cpp
-  src/d3drm/backends/sdl3gpu/shaders/generated/ShaderIndex.cpp
-  src/d3drm/backends/software/renderer.cpp
 )
 
-find_package(OpenGL)
-find_package(GLEW)
-if(OpenGL_FOUND AND GLEW_FOUND)
-  message(STATUS "Found OpenGL and GLEW: enabling OpenGL 1.x renderer")
-  target_sources(miniwin PRIVATE src/d3drm/backends/opengl1/renderer.cpp)
-  target_compile_definitions(miniwin PRIVATE USE_OPENGL1)
-  target_link_libraries(miniwin PRIVATE OpenGL::GL GLEW::GLEW)
-else()
-  message(STATUS "🧩 OpenGL 1.x support not enabled — needs OpenGL and GLEW")
+target_compile_definitions(miniwin PRIVATE
+    $<$<CONFIG:Debug>:DEBUG>
+)
+
+list(APPEND GRAPHICS_BACKENDS USE_SOFTWARE_RENDER)
+list(APPEND GRAPHICS_BACKENDS USE_SDL_GPU)
+
+if(NOT (VITA OR WINDOWS_STORE))
+  find_package(OpenGL)
+    if(OpenGL_FOUND)
+      message(STATUS "Found OpenGL: enabling OpenGL 1.x renderer")
+      target_sources(miniwin PRIVATE
+      src/d3drm/backends/opengl1/actual.cpp
+      src/d3drm/backends/opengl1/renderer.cpp
+    )
+    list(APPEND GRAPHICS_BACKENDS USE_OPENGL1)
+    target_link_libraries(miniwin PRIVATE OpenGL::GL)
+  else()
+    message(STATUS "🧩 OpenGL 1.x support not enabled — needs OpenGL")
+  endif()
+
+  find_library(OPENGL_ES2_LIBRARY NAMES GLESv2)
+  if(EMSCRIPTEN OR OPENGL_ES2_LIBRARY)
+    message(STATUS "Found OpenGL: enabling OpenGL ES 2.x renderer")
+    target_sources(miniwin PRIVATE src/d3drm/backends/opengles2/renderer.cpp)
+    list(APPEND GRAPHICS_BACKENDS USE_OPENGLES2)
+    if(OPENGL_ES2_LIBRARY)
+      target_link_libraries(miniwin PRIVATE ${OPENGL_ES2_LIBRARY})
+    endif()
+  else()
+    message(STATUS "🧩 OpenGL ES 2.x support not enabled")
+  endif()
+
+  find_library(OPENGL_ES3_LIBRARY NAMES GLESv3 GLESv2)
+  if(EMSCRIPTEN OR OPENGL_ES3_LIBRARY)
+    message(STATUS "Found OpenGL: enabling OpenGL ES 3.x renderer")
+    target_sources(miniwin PRIVATE src/d3drm/backends/opengles3/renderer.cpp)
+    list(APPEND GRAPHICS_BACKENDS USE_OPENGLES3)
+    if(OPENGL_ES3_LIBRARY)
+      target_link_libraries(miniwin PRIVATE ${OPENGL_ES3_LIBRARY})
+    endif()
+  else()
+    message(STATUS "🧩 OpenGL ES 3.x support not enabled")
+  endif()
 endif()
 
-find_library(OPENGL_ES2_LIBRARY NAMES GLESv2)
-if(OPENGL_ES2_LIBRARY)
-  message(STATUS "Found OpenGL: enabling OpenGL ES 2.x renderer")
-  target_sources(miniwin PRIVATE src/d3drm/backends/opengles2/renderer.cpp)
-  target_compile_definitions(miniwin PRIVATE USE_OPENGLES2)
-  target_link_libraries(miniwin PRIVATE OpenGL::GL)
-else()
-  message(STATUS "🧩 OpenGL ES 2.x support not enabled")
+if(NINTENDO_SWITCH)
+  # Remove USE_OPENGL1 as incompatible.
+  # Remove everything else as not needed.
+  list(REMOVE_ITEM GRAPHICS_BACKENDS USE_SOFTWARE_RENDER USE_OPENGL1 USE_OPENGLES2) #USE_SDL_GPU
 endif()
 
-if(WIN32)
+if(VITA)
+  add_subdirectory(src/d3drm/backends/gxm/shaders)
+
+  target_sources(miniwin PRIVATE
+    src/d3drm/backends/gxm/gxm_context.cpp
+    src/d3drm/backends/gxm/gxm_renderer.cpp
+    src/d3drm/backends/gxm/gxm_memory.cpp
+    src/d3drm/backends/gxm/tlsf.c
+  )
+  target_link_libraries(miniwin PRIVATE
+    SceGxm_stub
+    SceRazorCapture_stub
+    SceRazorHud_stub
+    taihen_stub
+    gxm_shaders
+  )
+  list(APPEND GRAPHICS_BACKENDS USE_GXM)
+  list(REMOVE_ITEM GRAPHICS_BACKENDS USE_SOFTWARE_RENDER USE_SDL_GPU)
+endif()
+
+if(NINTENDO_3DS)
+  if(ISLE_DEBUG)
+    find_library(CITRO3D_LIBRARY NAMES citro3dd)
+  else()
+    find_library(CITRO3D_LIBRARY NAMES citro3d)
+  endif()
+  if(CITRO3D_LIBRARY)
+    message(STATUS "Found citro3d: enabling Citro3D renderer")
+    target_sources(miniwin PRIVATE src/d3drm/backends/citro3d/renderer.cpp)
+    ctr_add_shader_library(vshader src/d3drm/backends/citro3d/vshader.v.pica)
+    dkp_add_embedded_binary_library(3ds_shaders vshader)
+    target_link_libraries(miniwin PRIVATE ${CITRO3D_LIBRARY} 3ds_shaders)
+    list(APPEND GRAPHICS_BACKENDS USE_CITRO3D)
+  else()
+    message(STATUS "🧩 Citro3D support not enabled")
+  endif()
+endif()
+
+if(WIN32 AND NOT WINDOWS_STORE)
   target_sources(miniwin PRIVATE
     src/d3drm/backends/directx9/actual.cpp
     src/d3drm/backends/directx9/renderer.cpp
   )
   target_link_libraries(miniwin PRIVATE d3d9)
+  list(APPEND GRAPHICS_BACKENDS USE_DIRECTX9)
+endif()
+
+if(WINDOWS_STORE)
+  add_compile_definitions(WINDOWS_STORE)
+endif()
+
+if(USE_SDL_GPU IN_LIST GRAPHICS_BACKENDS)
+  target_sources(miniwin PRIVATE
+    src/d3drm/backends/sdl3gpu/renderer.cpp
+    src/d3drm/backends/sdl3gpu/shaders/generated/ShaderIndex.cpp
+  )
+endif()
+
+if(USE_SOFTWARE_RENDER IN_LIST GRAPHICS_BACKENDS)
+  target_sources(miniwin PRIVATE
+    src/d3drm/backends/software/renderer.cpp
+  )
 endif()
 
 target_compile_definitions(miniwin PUBLIC MINIWIN)
@@ -66,6 +149,9 @@ target_include_directories(miniwin
 target_link_libraries(miniwin PUBLIC miniwin-headers)
 
 target_link_libraries(miniwin PRIVATE SDL3::SDL3)
+
+target_compile_definitions(miniwin PUBLIC ${GRAPHICS_BACKENDS})
+
 
 # Shader stuff
 
@@ -118,29 +204,38 @@ foreach(shader_src IN LISTS miniwin_shaders)
   else()
     message(FATAL_ERROR "Unknown stage (${src_stage_ext})")
   endif()
+  set(dxbc "${compiled_bindir}/dxbc/${filename_wle}.dxbc")
   set(dxil "${compiled_bindir}/dxil/${filename_wle}.dxil")
   set(msl "${compiled_bindir}/msl/${filename_wle}.msl")
   set(spirv "${compiled_bindir}/spirv/${filename_wle}.spv")
   set(shader_filename "${filename_wle}.h")
   set(shader_header "${shader_gen_dir}/${shader_filename}")
   if(ISLE_COMPILE_SHADERS)
+    add_custom_command(OUTPUT "${dxbc}"
+      COMMAND "${SDL_SHADERCROSS_BIN}" "${shader_src}" -o "${dxbc}"
+        -s "${src_format}" -d "DXBC" -t "${shader_stage}"
+        -I "${shader_src_dir}"
+      DEPENDS create-generated-shader-directories "${shader_src}" ${miniwin_shaders_DEPENDS})
     add_custom_command(OUTPUT "${dxil}"
       COMMAND "${SDL_SHADERCROSS_BIN}" "${shader_src}" -o "${dxil}"
         -s "${src_format}" -d "DXIL" -t "${shader_stage}"
+        -I "${shader_src_dir}"
       DEPENDS create-generated-shader-directories "${shader_src}" ${miniwin_shaders_DEPENDS})
     add_custom_command(OUTPUT "${msl}"
       COMMAND "${SDL_SHADERCROSS_BIN}" "${shader_src}" -o "${msl}"
         -s "${src_format}" -d "MSL" -t "${shader_stage}"
+        -I "${shader_src_dir}"
       DEPENDS create-generated-shader-directories "${shader_src}" ${miniwin_shaders_DEPENDS})
     add_custom_command(OUTPUT "${spirv}"
       COMMAND "${SDL_SHADERCROSS_BIN}" "${shader_src}" -o "${spirv}"
         -s "${src_format}" -d "SPIRV" -t "${shader_stage}"
+        -I "${shader_src_dir}"
       DEPENDS create-generated-shader-directories "${shader_src}" ${miniwin_shaders_DEPENDS})
     add_custom_command(OUTPUT "${shader_header}"
       COMMAND Python3::Interpreter "${py_gencshadersource}" "header" "--output" "${shader_header}"
         "--stage" "${shader_stage}" "--variable" "${shader_variable}"
-        "--dxil" "${dxil}" "--msl" "${msl}" "--spirv" "${spirv}"
-      DEPENDS "${py_gencshadersource}" "${dxil}" "${msl}" "${spirv}")
+        "--dxbc" "${dxbc}" "--dxil" "${dxil}" "--msl" "${msl}" "--spirv" "${spirv}"
+      DEPENDS "${py_gencshadersource}" "${dxbc}" "${dxil}" "${msl}" "${spirv}")
   endif()
   target_sources(miniwin PRIVATE "${shader_header}")
   list(APPEND shader_names "${shader_name}")

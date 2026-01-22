@@ -10,6 +10,7 @@
 struct DeferredDrawCommand {
 	DWORD meshId;
 	D3DRMMATRIX4D modelViewMatrix;
+	D3DRMMATRIX4D worldMatrix;
 	Matrix3x3 normalMatrix;
 	Appearance appearance;
 	float depth;
@@ -20,6 +21,7 @@ class Direct3DRMFrameImpl;
 
 struct Direct3DRMViewportImpl : public Direct3DRMObjectBaseImpl<IDirect3DRMViewport> {
 	Direct3DRMViewportImpl(DWORD width, DWORD height, Direct3DRMRenderer* renderer);
+	~Direct3DRMViewportImpl() override;
 	HRESULT Render(IDirect3DRMFrame* group) override;
 	/**
 	 * @brief Blit the render back to our backbuffer
@@ -36,24 +38,24 @@ struct Direct3DRMViewportImpl : public Direct3DRMObjectBaseImpl<IDirect3DRMViewp
 	D3DVALUE GetBack() override;
 	HRESULT SetField(D3DVALUE field) override;
 	D3DVALUE GetField() override;
-	DWORD GetWidth() override;
-	DWORD GetHeight() override;
+	DWORD GetWidth() override { return m_virtualWidth; }
+	DWORD GetHeight() override { return m_virtualHeight; }
 	HRESULT Transform(D3DRMVECTOR4D* screen, D3DVECTOR* world) override;
 	HRESULT InverseTransform(D3DVECTOR* world, D3DRMVECTOR4D* screen) override;
 	HRESULT Pick(float x, float y, LPDIRECT3DRMPICKEDARRAY* pickedArray) override;
 	void CloseDevice();
+	void UpdateProjectionMatrix();
 
 private:
 	HRESULT RenderScene();
 	void CollectLightsFromFrame(IDirect3DRMFrame* frame, D3DRMMATRIX4D parentMatrix, std::vector<SceneLight>& lights);
 	void CollectMeshesFromFrame(IDirect3DRMFrame* frame, D3DRMMATRIX4D parentMatrix);
 	void BuildViewFrustumPlanes();
-	void UpdateProjectionMatrix();
 	Direct3DRMRenderer* m_renderer;
 	std::vector<DeferredDrawCommand> m_deferredDraws;
 	D3DCOLOR m_backgroundColor = 0xFF000000;
-	DWORD m_width;
-	DWORD m_height;
+	DWORD m_virtualWidth;
+	DWORD m_virtualHeight;
 	D3DRMMATRIX4D m_viewProjectionwMatrix;
 	D3DRMMATRIX4D m_viewMatrix;
 	D3DRMMATRIX4D m_projectionMatrix;

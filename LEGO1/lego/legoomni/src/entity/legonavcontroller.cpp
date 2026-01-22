@@ -341,7 +341,7 @@ MxBool LegoNavController::CalculateNewPosDir(
 	MxBool und = FALSE;
 
 	MxTime currentTime = Timer()->GetTime();
-	float deltaTime = (currentTime - m_lastTime) / 1000.0;
+	float deltaTime = Min((currentTime - m_lastTime) / 1000.0, 1. / 10.);
 	m_lastTime = currentTime;
 
 	if (ProcessKeyboardInput() == FAILURE) {
@@ -555,7 +555,7 @@ MxResult LegoNavController::ProcessJoystickInput(MxBool& p_und)
 				LegoWorld* world = CurrentWorld();
 
 				if (world && world->GetCameraController()) {
-					world->GetCameraController()->FUN_10012320(DTOR(povPosition));
+					world->GetCameraController()->RotateY(DTOR(povPosition));
 					p_und = TRUE;
 				}
 			}
@@ -655,7 +655,44 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 {
 	if (((MxNotificationParam&) p_param).GetNotification() == c_notificationKeyPress) {
 		m_unk0x5d = TRUE;
-		SDL_Keycode key = ((LegoEventNotificationParam&) p_param).GetKey();
+		SDL_Keycode originKey = ((LegoEventNotificationParam&) p_param).GetKey();
+		SDL_Keycode key = originKey;
+
+		// This is necessary so any players using the WASD movement option can
+		// also use Debug Mode, which normally makes use of the WASD keys.
+		//
+		// For those players, we just swap the two and remap
+		// those conflicting debug keys to the arrow keys.
+		if (LegoOmni::GetInstance()->GetInputManager()->GetWasd()) {
+			switch (originKey) {
+			case SDLK_W:
+				key = SDLK_UP;
+				break;
+			case SDLK_A:
+				key = SDLK_LEFT;
+				break;
+			case SDLK_S:
+				key = SDLK_DOWN;
+				break;
+			case SDLK_D:
+				key = SDLK_RIGHT;
+				break;
+			case SDLK_UP:
+				key = SDLK_W;
+				break;
+			case SDLK_LEFT:
+				key = SDLK_A;
+				break;
+			case SDLK_DOWN:
+				key = SDLK_S;
+				break;
+			case SDLK_RIGHT:
+				key = SDLK_D;
+				break;
+			default:
+				break;
+			}
+		}
 
 		switch (key) {
 		case SDLK_PAUSE: // Pause game
@@ -672,10 +709,10 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 				InfocenterState* state = (InfocenterState*) GameState()->GetState("InfocenterState");
 				assert(state);
 
-				if (state != NULL && state->m_unk0x74 != 8 && currentWorld->Escape()) {
+				if (state != NULL && state->m_state != InfocenterState::e_exitQueried && currentWorld->Escape()) {
 					BackgroundAudioManager()->Stop();
 					TransitionManager()->StartTransition(MxTransitionManager::e_mosaic, 50, FALSE, FALSE);
-					state->m_unk0x74 = 8;
+					state->m_state = InfocenterState::e_exitQueried;
 				}
 			}
 			break;
@@ -697,7 +734,7 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 				for (MxS32 i = 0; i < numPlants; i++) {
 					LegoEntity* entity = plantMgr->CreatePlant(i, NULL, LegoOmni::e_act1);
 
-					if (entity != NULL && !entity->GetUnknown0x10IsSet(LegoEntity::c_altBit1)) {
+					if (entity != NULL && !entity->IsInteraction(LegoEntity::c_disabled)) {
 						LegoROI* roi = entity->GetROI();
 
 						if (roi != NULL && roi->GetVisibility()) {
@@ -763,7 +800,7 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 			// Check if the the key is part of the debug password
 			if (!*g_currentInput) {
 				// password "protected" debug shortcuts
-				switch (((LegoEventNotificationParam&) p_param).GetKey()) {
+				switch (key) {
 				case SDLK_TAB:
 					VideoManager()->ToggleFPS(g_fpsEnabled);
 					if (g_fpsEnabled) {
@@ -803,7 +840,28 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 							// Add to base g_locations offset
 							g_nextLocation += key - '0';
 							g_locationCalcStep = 0;
-							UpdateLocation(g_nextLocation);
+
+							LegoPathActor* userActor = UserActor();
+							if (userActor != NULL && (MxU32) g_nextLocation < sizeOfArray(g_locations)) {
+								LegoWorld* world = CurrentWorld();
+								LegoLocation::Boundary* boundary = &g_locations[g_nextLocation].m_boundaryA;
+								if (world != NULL && boundary->m_name != NULL) {
+									world->PlaceActor(
+										userActor,
+										boundary->m_name,
+										boundary->m_src,
+										boundary->m_srcScale,
+										boundary->m_dest,
+										boundary->m_destScale
+									);
+								}
+								userActor->SetLocation(
+									g_locations[g_nextLocation].m_position,
+									g_locations[g_nextLocation].m_direction,
+									g_locations[g_nextLocation].m_up,
+									FALSE
+								);
+							}
 						}
 					}
 					else if (g_animationCalcStep) {
@@ -870,7 +928,7 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 							}
 
 							GameState()->SetCurrentAct(LegoGameState::e_act3);
-							act3State->m_unk0x08 = 2;
+							act3State->m_state = Act3State::e_goodEnding;
 							GameState()->m_currentArea = LegoGameState::e_act3script;
 							GameState()->SwitchArea(LegoGameState::e_infomain);
 							break;
@@ -884,7 +942,7 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 							}
 
 							GameState()->SetCurrentAct(LegoGameState::e_act3);
-							act3State->m_unk0x08 = 3;
+							act3State->m_state = Act3State::e_badEnding;
 							GameState()->m_currentArea = LegoGameState::e_act3script;
 							GameState()->SwitchArea(LegoGameState::e_infomain);
 							break;
@@ -902,7 +960,7 @@ MxLong LegoNavController::Notify(MxParam& p_param)
 					break;
 				case SDLK_A:
 					if (g_animationCalcStep == 1) {
-						Lego()->m_unk0x13c = TRUE;
+						Lego()->m_initialized = TRUE;
 						AnimationManager()->FUN_10060570(TRUE);
 						g_animationCalcStep = 0;
 					}

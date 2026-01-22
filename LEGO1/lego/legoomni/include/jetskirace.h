@@ -29,17 +29,17 @@ public:
 		return !strcmp(p_name, JetskiRace::ClassName()) || LegoRace::IsA(p_name);
 	}
 
-	MxResult Create(MxDSAction& p_dsAction) override;                   // vtable+0x18
-	void ReadyWorld() override;                                         // vtable+0x50
-	MxBool Escape() override;                                           // vtable+0x64
-	MxLong HandleClick(LegoEventNotificationParam&) override;           // vtable+0x6c
-	MxLong HandlePathStruct(LegoPathStructNotificationParam&) override; // vtable+0x70
-	MxLong HandleEndAction(MxEndActionNotificationParam&) override;     // vtable+0x74
+	MxResult Create(MxDSAction& p_dsAction) override;                    // vtable+0x18
+	void ReadyWorld() override;                                          // vtable+0x50
+	MxBool Escape() override;                                            // vtable+0x64
+	MxLong HandleControl(LegoControlManagerNotificationParam&) override; // vtable+0x6c
+	MxLong HandlePathStruct(LegoPathStructNotificationParam&) override;  // vtable+0x70
+	MxLong HandleEndAction(MxEndActionNotificationParam&) override;      // vtable+0x74
 
-	void FUN_10016930(MxS32 p_param1, MxS16 p_param2);
+	void SetProgressPosition(MxS32 p_actorId, MxS16 p_progress);
 
 private:
-	static MxS32 g_unk0x100f0c78;
+	static MxS32 g_lapsCount;
 };
 
 // VTABLE: LEGO1 0x100d4fa8

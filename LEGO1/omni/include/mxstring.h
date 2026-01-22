@@ -9,7 +9,7 @@
 // SIZE 0x10
 class MxString : public MxCore {
 public:
-	MxString();
+	LEGO1_EXPORT MxString();
 	MxString(const MxString& p_str);
 	LEGO1_EXPORT MxString(const char* p_str);
 	MxString(const char* p_str, MxU16 p_maxlen);
@@ -20,10 +20,10 @@ public:
 	void ToLowerCase();
 	void MapPathToFilesystem() { MapPathToFilesystem(m_data); }
 
-	MxString& operator=(const MxString& p_str);
-	const MxString& operator=(const char* p_str);
-	MxString operator+(const MxString& p_str) const;
-	MxString operator+(const char* p_str) const;
+	LEGO1_EXPORT MxString& operator=(const MxString& p_str);
+	LEGO1_EXPORT const MxString& operator=(const char* p_str);
+	LEGO1_EXPORT MxString operator+(const MxString& p_str) const;
+	LEGO1_EXPORT MxString operator+(const char* p_str) const;
 	LEGO1_EXPORT MxString& operator+=(const char* p_str);
 
 	static void CharSwap(char* p_a, char* p_b);
